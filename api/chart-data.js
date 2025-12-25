@@ -25,18 +25,26 @@ export default async function handler(req, res) {
       return res.status(response.status).json({ error: 'Failed to fetch gist data' });
     }
 
-    const gistData = await response.json();
-    const fileName = 'youtube-data.json'; // 與您建立 Gist 時的檔名一致
+    let gistData;
+    try {
+      // 將 json() 呼叫也包在 try-catch 中
+      gistData = await response.json();
+    } catch (jsonError) {
+      console.error('Failed to parse JSON response from GitHub API:', jsonError);
+      // GitHub API 在某些錯誤情況下可能回傳非 JSON 格式，但 status code 卻是 2xx，較少見
+      // 或者網路問題導致 response body 不完整
+      return res.status(502).json({ error: 'Bad Gateway: Failed to parse response from GitHub' });
+    }
 
+    const fileName = 'youtube-data.json'; // 與您建立 Gist 時的檔名一致
     let data = [];
-    if (gistData.files[fileName] && gistData.files[fileName].content) {
+    if (gistData.files && gistData.files[fileName] && gistData.files[fileName].content) {
       try {
         data = JSON.parse(gistData.files[fileName].content);
         // 確保數據按時間戳記排序 (確保圖表按時間順序)
         data.sort((a, b) => a.timestamp - b.timestamp);
       } catch (parseError) {
         console.error('Failed to parse gist content as JSON:', parseError);
-        // 如果解析失敗，返回空陣列或錯誤
         data = [];
         // return res.status(500).json({ error: 'Failed to parse gist data' }); // 或者返回錯誤
       }
@@ -45,7 +53,7 @@ export default async function handler(req, res) {
     res.status(200).json(data);
   } catch (error) {
     // 在這裡，'error' 是一個錯誤物件，不是 Response 物件
-    console.error('Error fetching chart data:', error); // 移除了對 error.status 的嘗試存取
+    console.error('Error fetching chart data:', error);
     // 如果是 fetch 失敗 (例如網路問題)，通常會沒有 status 屬性
     // 我們統一返回 500
     res.status(500).json({ error: 'Internal Server Error' });
