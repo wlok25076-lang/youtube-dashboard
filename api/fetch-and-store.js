@@ -1,103 +1,176 @@
 // api/fetch-and-store.js
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3/videos';
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
-const GIST_ID = process.env.GIST_ID; // 您的 Gist ID
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN; // 您的 GitHub PAT
+const GIST_ID = process.env.GIST_ID;
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const CRON_AUTH_TOKEN = process.env.CRON_AUTH_TOKEN; // 明確聲明
 
 export default async function handler(req, res) {
+  // ==================== 除錯模式 ====================
+  // 訪問 /api/fetch-and-store?debug=1 來查看詳細資訊
+  if (req.query.debug === '1') {
+    const authHeader = req.headers.authorization;
+    return res.status(200).json({
+      debug: true,
+      timestamp: new Date().toISOString(),
+      headersReceived: {
+        authorization: authHeader || '(未收到)',
+        // 可選：查看其他你可能關心的頭
+        'user-agent': req.headers['user-agent'],
+        'x-forwarded-for': req.headers['x-forwarded-for'],
+      },
+      environment: {
+        YOUTUBE_API_KEY: YOUTUBE_API_KEY ? `已設定 (前4位: ${YOUTUBE_API_KEY.substring(0,4)}...)` : '未設定',
+        GIST_ID: GIST_ID ? `已設定` : '未設定',
+        GITHUB_TOKEN: GITHUB_TOKEN ? `已設定` : '未設定',
+        CRON_AUTH_TOKEN: CRON_AUTH_TOKEN ? `已設定 (前4位: ${CRON_AUTH_TOKEN.substring(0,4)}...)` : '未設定',
+        NODE_ENV: process.env.NODE_ENV,
+        VERCEL_ENV: process.env.VERCEL_ENV || '未設定',
+      },
+      // 核心診斷資訊
+      authDiagnosis: {
+        receivedHeader: authHeader,
+        expectedPrefix: `Bearer ${CRON_AUTH_TOKEN ? CRON_AUTH_TOKEN.substring(0, 4) + '...' : '[無令牌]'}`,
+        matchStatus: authHeader === `Bearer ${CRON_AUTH_TOKEN}` ? '匹配' : '不匹配',
+        isProduction: process.env.NODE_ENV === 'production',
+        willBlockInProd: (process.env.NODE_ENV === 'production' && authHeader !== `Bearer ${CRON_AUTH_TOKEN}`) ? '是' : '否',
+      }
+    });
+  }
+
+  // ==================== 正式邏輯 ====================
+  // 1. 檢查請求方法
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // 驗證是否為 Cron Job 的請求 (重要：防止被隨意呼叫)
-  const cronAuth = req.headers['authorization'];
-  const expectedAuth = `Bearer ${process.env.CRON_AUTH_TOKEN}`;
-  if (process.env.NODE_ENV === 'production' && cronAuth !== expectedAuth) {
-    console.log('Unauthorized cron request');
-    return res.status(401).json({ error: 'Unauthorized' });
+  // 2. 生產環境認證檢查 (使用標準 Authorization: Bearer 頭)
+  if (process.env.NODE_ENV === 'production') {
+    const authHeader = req.headers.authorization;
+    const expectedHeader = `Bearer ${CRON_AUTH_TOKEN}`;
+    
+    if (!authHeader || authHeader !== expectedHeader) {
+      // 記錄詳細的失敗日誌以便排查
+      console.error('🚨 未授權的定時任務請求', {
+        received: authHeader || '(空)',
+        expectedPreview: expectedHeader.substring(0, 20) + '...',
+        clientIP: req.headers['x-forwarded-for'],
+        time: new Date().toISOString()
+      });
+      return res.status(401).json({ 
+        error: 'Unauthorized',
+        message: '無效或缺失的授權令牌'
+      });
+    }
+  }
+
+  // 3. 檢查必要環境變數
+  if (!YOUTUBE_API_KEY || !GIST_ID || !GITHUB_TOKEN) {
+    console.error('缺少必要的環境變數:', {
+      hasYoutubeKey: !!YOUTUBE_API_KEY,
+      hasGistId: !!GIST_ID,
+      hasGithubToken: !!GITHUB_TOKEN
+    });
+    return res.status(500).json({ 
+      error: '伺服器配置錯誤',
+      message: '缺少 API 金鑰、Gist ID 或 GitHub Token'
+    });
   }
 
   const VIDEO_ID = 'm2ANkjMRuXc'; // 你要追蹤的固定影片 ID
 
-  if (!YOUTUBE_API_KEY || !GIST_ID || !GITHUB_TOKEN) {
-    console.error('Missing required environment variables');
-    return res.status(500).json({ error: 'Server configuration error: Missing API Key, Gist ID, or GitHub Token' });
-  }
-
   try {
+    // 4. 呼叫 YouTube API
     const youtubeUrl = `${YOUTUBE_API_BASE}?id=${VIDEO_ID}&part=statistics&key=${YOUTUBE_API_KEY}`;
     const youtubeResponse = await fetch(youtubeUrl);
 
     if (!youtubeResponse.ok) {
-      const errorText = await youtubeResponse.text(); // 使用 text() 避免 json() 可能的錯誤
-      console.error(`YouTube API Error: ${youtubeResponse.status} - ${errorText}`);
-      return res.status(youtubeResponse.status).json({ error: `YouTube API Error: ${errorText}` });
+      const errorText = await youtubeResponse.text();
+      console.error(`YouTube API 錯誤 (${youtubeResponse.status}):`, errorText);
+      return res.status(youtubeResponse.status).json({ 
+        error: `YouTube API 錯誤`,
+        details: errorText.substring(0, 200) // 限制長度
+      });
     }
 
-    let youtubeData;
-    try {
-      youtubeData = await youtubeResponse.json(); // 包在 try-catch
-    } catch (jsonError) {
-      console.error('Failed to parse JSON response from YouTube API:', jsonError);
-      return res.status(502).json({ error: 'Bad Gateway: Failed to parse response from YouTube' });
-    }
+    const youtubeData = await youtubeResponse.json();
 
     if (!youtubeData.items || youtubeData.items.length === 0) {
-      console.error(`Video not found: ${VIDEO_ID}`);
-      return res.status(404).json({ error: 'Video not found' });
+      console.error(`影片未找到: ${VIDEO_ID}`);
+      return res.status(404).json({ error: '影片未找到' });
     }
 
     const viewCount = parseInt(youtubeData.items[0].statistics.viewCount, 10);
     const timestamp = Date.now();
+    const currentDate = new Date(timestamp).toISOString().split('T')[0];
 
-    // --- 讀取現有 Gist 數據 ---
+    // 5. 讀取現有 Gist 數據
     const gistResponse = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
       headers: {
         'Authorization': `token ${GITHUB_TOKEN}`,
-        'User-Agent': 'vercel-app' // GitHub API 要求 User-Agent
+        'User-Agent': 'Vercel-YouTube-Tracker',
+        'Accept': 'application/vnd.github.v3+json'
       }
     });
 
-    if (!gistResponse.ok) { // 檢查 HTTP 狀態碼是否表示成功 (2xx)
-      console.error(`GitHub API Error fetching gist: ${gistResponse.status} - ${gistResponse.statusText}`);
-      return res.status(gistResponse.status).json({ error: 'Failed to fetch gist data' });
+    if (!gistResponse.ok) {
+      console.error(`GitHub Gist 讀取錯誤 (${gistResponse.status}):`, await gistResponse.text());
+      return res.status(gistResponse.status).json({ 
+        error: '讀取 Gist 數據失敗'
+      });
     }
 
-    let gistData;
-    try {
-      // 將 gistResponse.json() 也包在 try-catch 中
-      gistData = await gistResponse.json();
-    } catch (jsonError) {
-      console.error('Failed to parse JSON response from GitHub API while fetching gist:', jsonError);
-      return res.status(502).json({ error: 'Bad Gateway: Failed to parse response from GitHub' });
-    }
-
-    const fileName = 'youtube-data.json'; // 與您建立 Gist 時的檔名一致
+    const gistData = await gistResponse.json();
+    const fileName = 'youtube-data.json';
     let currentData = [];
 
     if (gistData.files && gistData.files[fileName] && gistData.files[fileName].content) {
       try {
         currentData = JSON.parse(gistData.files[fileName].content);
+        // 確保是陣列
+        if (!Array.isArray(currentData)) {
+          console.warn('Gist 內容不是陣列，重置為空陣列');
+          currentData = [];
+        }
       } catch (parseError) {
-        console.warn('Failed to parse existing gist content as JSON, starting fresh.', parseError);
+        console.warn('解析現有 Gist JSON 失敗，重置:', parseError.message);
         currentData = [];
       }
     }
 
-    // --- 新增數據 ---
-    const newEntry = { timestamp, viewCount, date: new Date(timestamp).toISOString().split('T')[0] };
-    currentData.push(newEntry);
+    // 6. 新增數據 (可選：避免同一天重複)
+    const todayEntryIndex = currentData.findIndex(entry => entry.date === currentDate);
+    const newEntry = { 
+      timestamp, 
+      viewCount, 
+      date: currentDate,
+      videoId: VIDEO_ID // 新增影片ID便於辨識
+    };
 
-    // --- 更新 Gist ---
-    const updatedContent = JSON.stringify(currentData, null, 2); // 格式化 JSON
+    if (todayEntryIndex >= 0) {
+      // 如果今天已有記錄，則覆蓋
+      currentData[todayEntryIndex] = newEntry;
+      console.log(`更新了今天的記錄: ${currentDate} - ${viewCount} 次觀看`);
+    } else {
+      // 否則新增
+      currentData.push(newEntry);
+      console.log(`新增記錄: ${currentDate} - ${viewCount} 次觀看`);
+    }
+
+    // 按時間戳記排序
+    currentData.sort((a, b) => a.timestamp - b.timestamp);
+
+    // 7. 更新 Gist
+    const updatedContent = JSON.stringify(currentData, null, 2);
     const updateResponse = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
       method: 'PATCH',
       headers: {
         'Authorization': `token ${GITHUB_TOKEN}`,
         'Content-Type': 'application/json',
-        'User-Agent': 'vercel-app'
+        'User-Agent': 'Vercel-YouTube-Tracker'
       },
       body: JSON.stringify({
+        description: `YouTube 影片 ${VIDEO_ID} 觀看數追蹤數據，最後更新: ${new Date().toISOString()}`,
         files: {
           [fileName]: {
             content: updatedContent
@@ -106,29 +179,36 @@ export default async function handler(req, res) {
       })
     });
 
-    if (!updateResponse.ok) { // 檢查 HTTP 狀態碼是否表示成功 (2xx)
-      console.error(`GitHub API Error updating gist: ${updateResponse.status} - ${updateResponse.statusText}`);
-      return res.status(updateResponse.status).json({ error: 'Failed to update gist data' });
+    if (!updateResponse.ok) {
+      console.error(`GitHub Gist 更新錯誤 (${updateResponse.status}):`, await updateResponse.text());
+      return res.status(updateResponse.status).json({ 
+        error: '更新 Gist 數據失敗'
+      });
     }
 
-    // 再次將 updateResponse.json() 包在 try-catch (雖然 PATCH 通常沒有 body，但 API 可能會返回)
-    try {
-       await updateResponse.json(); // 通常 PATCH 不會有 JSON body，但為了保險起見
-    } catch (jsonError) {
-       // 忽略這個錯誤，因為 PATCH 通常不需要處理 JSON response body
-       console.warn('Warning: Failed to parse JSON response from GitHub API while updating gist (this might be normal).', jsonError);
-    }
+    console.log(`✅ 成功儲存數據: ${VIDEO_ID} - ${viewCount} 次觀看 (${currentDate})`);
 
-    console.log(`Stored data for ${VIDEO_ID}: ${viewCount} at ${new Date(timestamp).toISOString()}`);
+    // 8. 成功回應
+    res.status(200).json({ 
+      success: true,
+      message: '數據獲取並儲存成功',
+      data: newEntry,
+      gistUpdated: true,
+      totalEntries: currentData.length
+    });
 
-    res.status(200).json({ message: 'Data fetched and stored successfully', data: newEntry });
   } catch (error) {
-    // 在這裡，'error' 是一個錯誤物件，不是 Response 物件
-    console.error('Error fetching or storing data:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
+    // 9. 全局錯誤處理
+    console.error('❌ 處理過程中發生未預期錯誤:', error);
+    res.status(500).json({ 
+      success: false,
+      error: '內部伺服器錯誤',
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 }
 
 export const config = {
-  runtime: 'nodejs', // <--- 改為 nodejs
+  runtime: 'nodejs',
 };
