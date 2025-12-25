@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube 播放量儀表板</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        input, button { margin: 5px 0; padding: 8px; }
+        #chartContainer { width: 100%; max-width: 800px; margin: 20px auto; }
+        #status { color: #666; font-style: italic; }
+    </style>
+</head>
+<body>
+    <h1>YouTube 播放量追蹤儀表板</h1>
+    <p>目前追蹤影片: <a href="https://www.youtube.com/watch?v=m2ANkjMRuXc" target="_blank">https://www.youtube.com/watch?v=m2ANkjMRuXc</a></p>
+    <button id="refreshButton">刷新圖表</button>
+    <div id="status">載入中...</div>
+    <div id="chartContainer">
+        <canvas id="viewChart"></canvas>
+    </div>
+
+    <script>
+        let chart;
+        const statusDiv = document.getElementById('status');
+
+        async function loadChartData() {
+            statusDiv.textContent = '載入數據中...';
+            try {
+                const response = await fetch('/api/chart-data');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                console.log('從後端獲取的圖表數據:', data);
+
+                if (data.length === 0) {
+                    statusDiv.textContent = '沒有數據。請確保定時任務已開始記錄。';
+                    return;
+                }
+
+                const labels = data.map(item => new Date(item.timestamp));
+                const viewCounts = data.map(item => item.viewCount);
+
+                updateChart(labels, viewCounts);
+                statusDiv.textContent = `數據更新時間: ${new Date().toLocaleString()}`;
+            } catch (error) {
+                console.error('獲取圖表數據失敗:', error);
+                statusDiv.textContent = `獲取數據失敗: ${error.message}`;
+            }
+        }
+
+        function updateChart(labels, viewCounts) {
+            const ctx = document.getElementById('viewChart').getContext('2d');
+
+            if (chart) {
+                chart.destroy();
+            }
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels, // X 軸標籤 (時間)
+                    datasets: [{
+                        label: '播放量',
+                        data: viewCounts, // Y 軸數據 (播放數)
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        fill: true,
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: '日期'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: '播放量'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        document.getElementById('refreshButton').addEventListener('click', loadChartData);
+
+        // 頁面載入時載入數據
+        loadChartData();
+
+        // 每小時自動刷新一次圖表 (可選，作為前端補充)
+        setInterval(loadChartData, 3600000);
+
+    </script>
+</body>
+</html>
