@@ -9,7 +9,5 @@
   "keywords": ["youtube", "dashboard", "vercel"],
   "author": "Your Name",
   "license": "MIT",
-  "dependencies": {
-    "@vercel/kv": "^2.0.0"
-  }
+  "dependencies": {}
 }

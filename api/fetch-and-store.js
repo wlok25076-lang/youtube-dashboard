@@ -1,8 +1,8 @@
 // api/fetch-and-store.js
-import { kv } from '@vercel/kv';
-
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3/videos';
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+const GIST_ID = process.env.GIST_ID; // 您的 Gist ID
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN; // 您的 GitHub PAT
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -19,9 +19,9 @@ export default async function handler(req, res) {
 
   const VIDEO_ID = 'm2ANkjMRuXc'; // 你要追蹤的固定影片 ID
 
-  if (!YOUTUBE_API_KEY) {
-    console.error('YOUTUBE_API_KEY is not set');
-    return res.status(500).json({ error: 'Server configuration error: API Key missing' });
+  if (!YOUTUBE_API_KEY || !GIST_ID || !GITHUB_TOKEN) {
+    console.error('Missing required environment variables');
+    return res.status(500).json({ error: 'Server configuration error: Missing API Key, Gist ID, or GitHub Token' });
   }
 
   try {
@@ -44,31 +44,62 @@ export default async function handler(req, res) {
     const viewCount = parseInt(youtubeData.items[0].statistics.viewCount, 10);
     const timestamp = Date.now();
 
-    // --- 儲存邏輯 ---
-    // 使用日期作為鍵，格式為 "videoId:YYYY-MM-DD"
-    const dateStr = new Date(timestamp).toISOString().split('T')[0]; // 例如 "2025-12-25"
-    const dataKey = `${VIDEO_ID}:${dateStr}`;
-    const keyListKey = `${VIDEO_ID}:keys`;
+    // --- 讀取現有 Gist 數據 ---
+    const gistResponse = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+      headers: {
+        'Authorization': `token ${GITHUB_TOKEN}`,
+        'User-Agent': 'vercel-app' // GitHub API 要求 User-Agent
+      }
+    });
 
-    // 儲存數據
-    const value = { timestamp, viewCount };
-    await kv.set(dataKey, value);
-
-    // 更新鍵列表 (記錄所有有數據的日期)
-    let keyList = await kv.get(keyListKey) || [];
-    if (!keyList.includes(dataKey)) {
-        keyList.push(dataKey);
-        // 限制列表大小，例如只保留最近 365 天的點 (可選)
-        if (keyList.length > 365) {
-          keyList = keyList.slice(-365);
-        }
-        await kv.set(keyListKey, keyList);
+    if (!gistResponse.ok) {
+      console.error(`GitHub API Error fetching gist: ${gistResponse.status}`);
+      return res.status(gistResponse.status).json({ error: 'Failed to fetch gist data' });
     }
-    // --- 儲存邏輯結束 ---
+
+    const gistData = await gistResponse.json();
+    const fileName = 'youtube-data.json'; // 與您建立 Gist 時的檔名一致
+    let currentData = [];
+
+    if (gistData.files[fileName] && gistData.files[fileName].content) {
+      try {
+        currentData = JSON.parse(gistData.files[fileName].content);
+      } catch (e) {
+        console.warn('Failed to parse existing gist content as JSON, starting fresh.');
+        currentData = [];
+      }
+    }
+
+    // --- 新增數據 ---
+    const newEntry = { timestamp, viewCount, date: new Date(timestamp).toISOString().split('T')[0] }; // 加入日期字串方便前端使用
+    currentData.push(newEntry);
+
+    // --- 更新 Gist ---
+    const updatedContent = JSON.stringify(currentData, null, 2); // 格式化 JSON
+    const updateResponse = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `token ${GITHUB_TOKEN}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'vercel-app'
+      },
+      body: JSON.stringify({
+        files: {
+          [fileName]: {
+            content: updatedContent
+          }
+        }
+      })
+    });
+
+    if (!updateResponse.ok) {
+      console.error(`GitHub API Error updating gist: ${updateResponse.status}`);
+      return res.status(updateResponse.status).json({ error: 'Failed to update gist data' });
+    }
 
     console.log(`Stored data for ${VIDEO_ID}: ${viewCount} at ${new Date(timestamp).toISOString()}`);
 
-    res.status(200).json({ message: 'Data fetched and stored successfully', data: value });
+    res.status(200).json({ message: 'Data fetched and stored successfully', data: newEntry });
   } catch (error) {
     console.error('Error fetching or storing data:', error);
     res.status(500).json({ error: 'Internal Server Error' });
