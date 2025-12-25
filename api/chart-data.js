@@ -20,8 +20,8 @@ export default async function handler(req, res) {
       }
     });
 
-    if (!response.ok) {
-      console.error(`GitHub API Error: ${response.status}`);
+    if (!response.ok) { // 檢查 HTTP 狀態碼是否表示成功 (2xx)
+      console.error(`GitHub API Error: ${response.status} - ${response.statusText}`);
       return res.status(response.status).json({ error: 'Failed to fetch gist data' });
     }
 
@@ -34,15 +34,20 @@ export default async function handler(req, res) {
         data = JSON.parse(gistData.files[fileName].content);
         // 確保數據按時間戳記排序 (確保圖表按時間順序)
         data.sort((a, b) => a.timestamp - b.timestamp);
-      } catch (e) {
-        console.error('Failed to parse gist content as JSON:', e);
+      } catch (parseError) {
+        console.error('Failed to parse gist content as JSON:', parseError);
+        // 如果解析失敗，返回空陣列或錯誤
         data = [];
+        // return res.status(500).json({ error: 'Failed to parse gist data' }); // 或者返回錯誤
       }
     }
 
     res.status(200).json(data);
   } catch (error) {
-    console.error('Error fetching chart data:', error);
+    // 在這裡，'error' 是一個錯誤物件，不是 Response 物件
+    console.error('Error fetching chart data:', error); // 移除了對 error.status 的嘗試存取
+    // 如果是 fetch 失敗 (例如網路問題)，通常會沒有 status 屬性
+    // 我們統一返回 500
     res.status(500).json({ error: 'Internal Server Error' });
   }
 }

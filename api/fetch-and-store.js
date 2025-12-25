@@ -52,8 +52,8 @@ export default async function handler(req, res) {
       }
     });
 
-    if (!gistResponse.ok) {
-      console.error(`GitHub API Error fetching gist: ${gistResponse.status}`);
+    if (!gistResponse.ok) { // 檢查 HTTP 狀態碼是否表示成功 (2xx)
+      console.error(`GitHub API Error fetching gist: ${gistResponse.status} - ${gistResponse.statusText}`);
       return res.status(gistResponse.status).json({ error: 'Failed to fetch gist data' });
     }
 
@@ -64,8 +64,8 @@ export default async function handler(req, res) {
     if (gistData.files[fileName] && gistData.files[fileName].content) {
       try {
         currentData = JSON.parse(gistData.files[fileName].content);
-      } catch (e) {
-        console.warn('Failed to parse existing gist content as JSON, starting fresh.');
+      } catch (parseError) {
+        console.warn('Failed to parse existing gist content as JSON, starting fresh.', parseError);
         currentData = [];
       }
     }
@@ -92,8 +92,8 @@ export default async function handler(req, res) {
       })
     });
 
-    if (!updateResponse.ok) {
-      console.error(`GitHub API Error updating gist: ${updateResponse.status}`);
+    if (!updateResponse.ok) { // 檢查 HTTP 狀態碼是否表示成功 (2xx)
+      console.error(`GitHub API Error updating gist: ${updateResponse.status} - ${updateResponse.statusText}`);
       return res.status(updateResponse.status).json({ error: 'Failed to update gist data' });
     }
 
@@ -101,7 +101,8 @@ export default async function handler(req, res) {
 
     res.status(200).json({ message: 'Data fetched and stored successfully', data: newEntry });
   } catch (error) {
-    console.error('Error fetching or storing data:', error);
+    // 在這裡，'error' 是一個錯誤物件，不是 Response 物件
+    console.error('Error fetching or storing data:', error); // 移除了對 error.status 的嘗試存取
     res.status(500).json({ error: 'Internal Server Error' });
   }
 }
