@@ -6,95 +6,411 @@
     <title>YouTube 播放量儀表板</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        :root {
+            --primary-color: #0070f3;
+            --secondary-color: #666;
+            --bg-color: #f5f5f5;
+            --card-bg: white;
+            --text-color: #333;
+            --border-color: #ddd;
+            --positive-color: #10b981;
+            --negative-color: #ef4444;
+            --warning-color: #f59e0b;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #121212;
+                --card-bg: #1e1e1e;
+                --text-color: #e5e5e5;
+                --border-color: #333;
+                --secondary-color: #a0a0a0;
+            }
+        }
+        
         body { 
-            font-family: Arial, sans-serif; 
-            margin: 20px; 
-            background-color: #f5f5f5; /* 背景顏色 */
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; 
+            margin: 0;
+            padding: 15px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
         }
+        
         .container {
-            max-width: 1200px; /* 最大寬度 */
-            margin: 0 auto; /* 置中 */
-            background-color: white; /* 內容區塊背景 */
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: var(--card-bg);
             padding: 20px;
-            border-radius: 8px; /* 圓角 */
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* 陰影 */
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
         }
+        
         h1 { 
-            color: #333; 
+            color: var(--text-color); 
             text-align: center;
+            margin-top: 0;
+            font-size: clamp(1.5rem, 4vw, 2rem);
         }
-        p { 
+        
+        .video-link { 
             text-align: center; 
-            color: #666; 
+            color: var(--secondary-color);
+            margin-bottom: 20px;
         }
+        
+        .video-link a {
+            color: var(--primary-color);
+            text-decoration: none;
+            word-break: break-all;
+        }
+        
+        .video-link a:hover {
+            text-decoration: underline;
+        }
+        
+        /* ========== 控制区域 ========== */
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: center;
+            justify-content: center;
+            margin: 25px 0;
+            padding: 15px;
+            background: rgba(0, 112, 243, 0.05);
+            border-radius: 8px;
+            border: 1px solid rgba(0, 112, 243, 0.1);
+        }
+        
         button { 
-            display: block; /* 讓按鈕獨立一行 */
-            margin: 10px auto; /* 置中並加邊距 */
             padding: 10px 20px; 
-            background-color: #0070f3; /* 按鈕顏色 */
+            background-color: var(--primary-color);
             color: white;
             border: none;
-            border-radius: 4px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+            min-width: 140px;
+        }
+        
+        button:hover {
+            background-color: #0051cc;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        .auto-refresh-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .auto-refresh-control label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
             cursor: pointer;
         }
-        button:hover {
-            background-color: #0051cc; /* 滑鼠懸停顏色 */
-        }
-        #chartContainer { 
-            width: 100%; 
-            max-width: 800px; 
-            margin: 20px auto; 
-            padding: 10px; /* 內距 */
-            border: 1px solid #ddd; /* 邊框 */
-            border-radius: 4px; /* 圓角 */
-        }
-        #status { 
-            color: #666; 
-            font-style: italic; 
-            text-align: center; /* 置中 */
-        }
-        #dataTableContainer {
-            width: 100%;
-            max-width: 800px;
-            margin: 20px auto;
-            padding: 10px;
-            border: 1px solid #ddd;
+        
+        .refresh-info {
+            font-size: 0.9em;
+            color: var(--secondary-color);
+            background: rgba(0,0,0,0.05);
+            padding: 4px 8px;
             border-radius: 4px;
         }
+        
+        /* ========== 数据统计卡片 ========== */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 15px;
+            margin: 25px 0;
+        }
+        
+        .stat-card {
+            background: var(--card-bg);
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            border: 1px solid var(--border-color);
+            text-align: center;
+            transition: transform 0.2s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .stat-card h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            color: var(--secondary-color);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .stat-card .value {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text-color);
+        }
+        
+        .stat-card .trend {
+            margin-top: 8px;
+            font-size: 13px;
+            padding: 3px 8px;
+            border-radius: 12px;
+            display: inline-block;
+        }
+        
+        .trend.positive {
+            background-color: rgba(16, 185, 129, 0.15);
+            color: var(--positive-color);
+        }
+        
+        .trend.negative {
+            background-color: rgba(239, 68, 68, 0.15);
+            color: var(--negative-color);
+        }
+        
+        .trend.neutral {
+            background-color: rgba(156, 163, 175, 0.15);
+            color: var(--secondary-color);
+        }
+        
+        /* ========== 图表区域 ========== */
+        #chartContainer { 
+            width: 100%; 
+            margin: 30px auto;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            background: var(--card-bg);
+        }
+        
+        #viewChart {
+            width: 100% !important;
+            height: 400px !important;
+        }
+        
+        /* ========== 表格区域 ========== */
+        #dataTableContainer {
+            width: 100%;
+            margin: 30px auto;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            background: var(--card-bg);
+            overflow-x: auto;
+        }
+        
         table {
             width: 100%;
-            border-collapse: collapse; /* 合併邊框 */
-            margin-top: 10px; /* 表格上方間距 */
+            border-collapse: collapse;
+            margin-top: 10px;
+            min-width: 600px;
         }
+        
         th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: center; /* 文字置中 */
+            border: 1px solid var(--border-color);
+            padding: 12px;
+            text-align: center;
         }
+        
         th {
-            background-color: #f2f2f2; /* 標題列背景 */
+            background-color: rgba(0, 112, 243, 0.08);
+            font-weight: 600;
         }
+        
         tr:nth-child(even) {
-            background-color: #f9f9f9; /* 斑馬紋 */
+            background-color: rgba(0,0,0,0.02);
         }
-        .change-positive { color: green; } /* 正增長顏色 */
-        .change-negative { color: red; }   /* 負增長顏色 */
-        .change-zero { color: gray; }      /* 零增長顏色 */
+        
+        .change-positive { color: var(--positive-color); font-weight: 600; }
+        .change-negative { color: var(--negative-color); font-weight: 600; }
+        .change-zero { color: var(--secondary-color); }
+        
+        /* ========== 状态信息 ========== */
+        #status { 
+            color: var(--secondary-color); 
+            font-style: italic; 
+            text-align: center;
+            margin: 20px 0;
+            padding: 10px;
+            background: rgba(0,0,0,0.03);
+            border-radius: 6px;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(0, 112, 243, 0.2);
+            border-top: 2px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        
+        @keyframes spin { 
+            0% { transform: rotate(0deg); } 
+            100% { transform: rotate(360deg); } 
+        }
+        
+        /* ========== 移动端优化 ========== */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            .container {
+                padding: 15px;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+                padding: 12px;
+            }
+            
+            button {
+                width: 100%;
+            }
+            
+            .auto-refresh-control {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 12px;
+            }
+            
+            .stat-card {
+                padding: 15px;
+            }
+            
+            .stat-card .value {
+                font-size: 22px;
+            }
+            
+            #chartContainer, #dataTableContainer {
+                padding: 15px;
+                margin: 20px auto;
+            }
+            
+            #viewChart {
+                height: 300px !important;
+            }
+            
+            table {
+                font-size: 14px;
+            }
+            
+            th, td {
+                padding: 8px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            #viewChart {
+                height: 250px !important;
+            }
+            
+            .stat-card .value {
+                font-size: 24px;
+            }
+        }
+        
+        /* ========== 工具类 ========== */
+        .hidden {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>YouTube 播放量追蹤儀表板</h1>
-        <p>目前追蹤影片: <a href="https://www.youtube.com/watch?v=m2ANkjMRuXc" target="_blank">https://www.youtube.com/watch?v=m2ANkjMRuXc</a></p>
-        <button id="refreshButton">刷新圖表與表格</button>
-        <div id="status">載入中...</div>
+        <h1>📊 YouTube 播放量追蹤儀表板</h1>
+        <p class="video-link">
+            目前追蹤影片: <a href="https://www.youtube.com/watch?v=m2ANkjMRuXc" target="_blank">https://www.youtube.com/watch?v=m2ANkjMRuXc</a>
+        </p>
         
+        <!-- 控制区域 -->
+        <div class="controls">
+            <button id="refreshButton">
+                <span class="button-text">🔄 刷新數據</span>
+                <span class="loading hidden"></span>
+            </button>
+            
+            <div class="auto-refresh-control">
+                <label>
+                    <input type="checkbox" id="autoRefreshCheckbox">
+                    ⚡ 自動刷新
+                </label>
+                <select id="refreshInterval">
+                    <option value="1">每1分鐘</option>
+                    <option value="5" selected>每5分鐘</option>
+                    <option value="15">每15分鐘</option>
+                    <option value="30">每30分鐘</option>
+                </select>
+                <span class="refresh-info" id="nextRefreshInfo"></span>
+            </div>
+        </div>
+        
+        <!-- 状态信息 -->
+        <div id="status">
+            <span class="loading"></span>載入中...
+        </div>
+        
+        <!-- 数据统计卡片 -->
+        <div class="stats-grid" id="statsCards">
+            <div class="stat-card">
+                <h3>🎯 當前播放量</h3>
+                <p class="value" id="currentViews">--</p>
+                <div class="trend neutral" id="currentTrend">--</div>
+            </div>
+            <div class="stat-card">
+                <h3>📈 今日增長</h3>
+                <p class="value" id="todayGrowth">--</p>
+                <div class="trend neutral" id="todayTrend">--</div>
+            </div>
+            <div class="stat-card">
+                <h3>⏱️ 平均每小時</h3>
+                <p class="value" id="avgHourly">--</p>
+                <div class="trend neutral" id="hourlyTrend">--</div>
+            </div>
+            <div class="stat-card">
+                <h3>📊 數據點數</h3>
+                <p class="value" id="dataPoints">--</p>
+                <div class="trend neutral">最近7天</div>
+            </div>
+        </div>
+        
+        <!-- 图表区域 -->
         <div id="chartContainer">
             <canvas id="viewChart"></canvas>
         </div>
 
+        <!-- 表格区域 -->
         <div id="dataTableContainer">
-            <h2>詳細數據</h2>
+            <h2>📋 詳細數據</h2>
             <table id="dataTable">
                 <thead>
                     <tr>
@@ -111,140 +427,371 @@
     </div>
 
     <script>
-        let chart;
+        // ==================== 全局变量 ====================
+        let chart = null;
+        let autoRefreshInterval = null;
+        let isAutoRefreshEnabled = false;
+        let lastUpdateTime = null;
         const statusDiv = document.getElementById('status');
         const dataTableBody = document.querySelector('#dataTable tbody');
-
+        
+        // ==================== 主函数：加载图表数据 ====================
         async function loadChartData() {
-            statusDiv.textContent = '載入數據中...';
-            dataTableBody.innerHTML = ''; // 清空舊的表格數據
-
+            // 显示加载状态
+            statusDiv.innerHTML = '<span class="loading"></span>載入數據中...';
+            document.querySelector('#refreshButton .loading').classList.remove('hidden');
+            document.querySelector('#refreshButton .button-text').textContent = '載入中...';
+            
             try {
                 const response = await fetch('/api/chart-data');
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    throw new Error(`HTTP 錯誤! 狀態碼: ${response.status}`);
                 }
                 const data = await response.json();
-                console.log('從後端獲取的圖表數據:', data);
+                console.log('獲取到的數據:', data);
 
-                if (data.length === 0) {
+                if (!data || data.length === 0) {
                     statusDiv.textContent = '沒有數據。請確保定時任務已開始記錄。';
+                    updateStatsCards([]);
                     return;
                 }
 
-                // --- 處理數據以用於圖表和表格 ---
-                // 確保數據按時間戳記排序 (最新的在最後)
-                data.sort((a, b) => a.timestamp - b.timestamp);
-
-                const labels = data.map(item => {
-                    // 將時間戳記格式化為更簡短的時間 (例如 MM/DD HH:MM)
-                    const date = new Date(item.timestamp);
-                    return date.toLocaleString('zh-TW', { 
-                        month: '2-digit', 
-                        day: '2-digit', 
-                        hour: '2-digit', 
-                        minute: '2-digit', 
-                        hour12: false 
-                    });
-                });
-                const viewCounts = data.map(item => item.viewCount);
-
-                // 處理表格數據
-                const tableRows = data.map((item, index) => {
-                    let change = 0;
-                    if (index > 0) {
-                        change = item.viewCount - data[index - 1].viewCount; // 修正此行
-                    }
-                    const dateObj = new Date(item.timestamp);
-                    const formattedDateTime = dateObj.toLocaleString('zh-TW', {
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                        hour12: false
-                    });
-
-                    return {
-                        dateTime: formattedDateTime,
-                        viewCount: item.viewCount,
-                        change: change
-                    };
-                });
-
-                // 更新圖表
-                updateChart(labels, viewCounts);
+                // 處理數據
+                const processedData = processChartData(data);
                 
-                // 更新表格
-                updateTable(tableRows);
+                // 更新所有組件
+                updateChart(processedData.labels, processedData.viewCounts);
+                updateTable(processedData.tableRows);
+                updateStatsCards(data);
+                
+                // 更新狀態和時間
+                lastUpdateTime = new Date();
+                const timeStr = lastUpdateTime.toLocaleTimeString('zh-TW', { 
+                    hour12: false,
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                statusDiv.innerHTML = `✅ 數據已更新: ${lastUpdateTime.toLocaleDateString()} ${timeStr} | 共 ${data.length} 筆記錄`;
+                
+                // 如果有自動刷新，更新下次刷新時間
+                if (isAutoRefreshEnabled) {
+                    updateNextRefreshTime();
+                }
 
-                statusDiv.textContent = `數據更新時間: ${new Date().toLocaleString()}`;
             } catch (error) {
                 console.error('獲取圖表數據失敗:', error);
-                statusDiv.textContent = `獲取數據失敗: ${error.message}`;
-                // 即使出錯，也要確保表格是空的
-                dataTableBody.innerHTML = '<tr><td colspan="3">加載數據失敗</td></tr>';
+                statusDiv.innerHTML = `❌ 獲取數據失敗: ${error.message}`;
+                
+                // 更新統計卡片為錯誤狀態
+                document.getElementById('currentViews').textContent = '錯誤';
+                document.getElementById('todayGrowth').textContent = '--';
+                document.getElementById('avgHourly').textContent = '--';
+                document.getElementById('dataPoints').textContent = '--';
+                
+                // 清空表格
+                dataTableBody.innerHTML = '<tr><td colspan="3">加載數據失敗，請稍後重試</td></tr>';
+                
+            } finally {
+                // 恢復按鈕狀態
+                document.querySelector('#refreshButton .loading').classList.add('hidden');
+                document.querySelector('#refreshButton .button-text').textContent = '🔄 刷新數據';
             }
         }
+        
+        // ==================== 數據處理函數 ====================
+        function processChartData(data) {
+            // 確保數據按時間戳記排序
+            const sortedData = [...data].sort((a, b) => a.timestamp - b.timestamp);
+            
+            // 準備圖表數據
+            const labels = sortedData.map(item => {
+                const date = new Date(item.timestamp);
+                return date.toLocaleString('zh-TW', { 
+                    month: '2-digit', 
+                    day: '2-digit', 
+                    hour: '2-digit', 
+                    minute: '2-digit', 
+                    hour12: false 
+                });
+            });
+            
+            const viewCounts = sortedData.map(item => item.viewCount);
+            
+            // 準備表格數據
+            const tableRows = sortedData.map((item, index) => {
+                let change = 0;
+                if (index > 0) {
+                    change = item.viewCount - sortedData[index - 1].viewCount;
+                }
+                
+                const dateObj = new Date(item.timestamp);
+                const formattedDateTime = dateObj.toLocaleString('zh-TW', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                });
 
+                return {
+                    dateTime: formattedDateTime,
+                    viewCount: item.viewCount,
+                    change: change
+                };
+            });
+            
+            return { labels, viewCounts, tableRows, sortedData };
+        }
+        
+        // ==================== 統計卡片功能 ====================
+        function updateStatsCards(data) {
+            if (!data || data.length === 0) {
+                resetStatsCards();
+                return;
+            }
+            
+            const sortedData = [...data].sort((a, b) => a.timestamp - b.timestamp);
+            const currentData = sortedData[sortedData.length - 1];
+            
+            // 1. 當前播放量
+            const currentViews = currentData.viewCount;
+            document.getElementById('currentViews').textContent = formatNumber(currentViews);
+            
+            // 計算趨勢（與1小時前比較）
+            let currentTrend = 'neutral';
+            let currentTrendText = '穩定';
+            if (sortedData.length >= 2) {
+                const prevHourIndex = findClosestIndex(sortedData, Date.now() - 60*60*1000);
+                if (prevHourIndex >= 0) {
+                    const prevViews = sortedData[prevHourIndex].viewCount;
+                    const diff = currentViews - prevViews;
+                    if (diff > 0) {
+                        currentTrend = 'positive';
+                        currentTrendText = `↑ 比1小時前 +${formatNumber(diff)}`;
+                    } else if (diff < 0) {
+                        currentTrend = 'negative';
+                        currentTrendText = `↓ 比1小時前 ${formatNumber(diff)}`;
+                    }
+                }
+            }
+            updateTrendElement('currentTrend', currentTrendText, currentTrend);
+            
+            // 2. 今日增長
+            const today = new Date().toDateString();
+            const todayData = sortedData.filter(item => 
+                new Date(item.timestamp).toDateString() === today
+            );
+            
+            let todayGrowth = 0;
+            let todayTrend = 'neutral';
+            if (todayData.length >= 2) {
+                const firstToday = todayData[0].viewCount;
+                const lastToday = todayData[todayData.length - 1].viewCount;
+                todayGrowth = lastToday - firstToday;
+                
+                document.getElementById('todayGrowth').textContent = 
+                    (todayGrowth > 0 ? '+' : '') + formatNumber(todayGrowth);
+                
+                todayTrend = todayGrowth > 0 ? 'positive' : todayGrowth < 0 ? 'negative' : 'neutral';
+                updateTrendElement('todayTrend', 
+                    todayGrowth > 0 ? `今日持續增長` : todayGrowth < 0 ? `今日下降` : `今日持平`,
+                    todayTrend
+                );
+            } else {
+                document.getElementById('todayGrowth').textContent = '--';
+                updateTrendElement('todayTrend', '數據不足', 'neutral');
+            }
+            
+            // 3. 平均每小時（最近24小時）
+            const last24h = sortedData.filter(item => 
+                Date.now() - item.timestamp < 24 * 60 * 60 * 1000
+            );
+            
+            let avgHourly = 0;
+            if (last24h.length >= 2) {
+                const totalGrowth = last24h[last24h.length - 1].viewCount - last24h[0].viewCount;
+                avgHourly = Math.round(totalGrowth / (last24h.length - 1));
+                
+                document.getElementById('avgHourly').textContent = 
+                    (avgHourly > 0 ? '+' : '') + formatNumber(avgHourly);
+                
+                const hourlyTrend = avgHourly > 0 ? 'positive' : avgHourly < 0 ? 'negative' : 'neutral';
+                updateTrendElement('hourlyTrend', 
+                    avgHourly > 0 ? `穩定增長` : avgHourly < 0 ? `增長放緩` : `保持平穩`,
+                    hourlyTrend
+                );
+            } else {
+                document.getElementById('avgHourly').textContent = '--';
+                updateTrendElement('hourlyTrend', '數據不足', 'neutral');
+            }
+            
+            // 4. 數據點數
+            document.getElementById('dataPoints').textContent = sortedData.length;
+        }
+        
+        function resetStatsCards() {
+            document.getElementById('currentViews').textContent = '--';
+            document.getElementById('todayGrowth').textContent = '--';
+            document.getElementById('avgHourly').textContent = '--';
+            document.getElementById('dataPoints').textContent = '--';
+            
+            updateTrendElement('currentTrend', '無數據', 'neutral');
+            updateTrendElement('todayTrend', '無數據', 'neutral');
+            updateTrendElement('hourlyTrend', '無數據', 'neutral');
+        }
+        
+        function updateTrendElement(elementId, text, trendClass) {
+            const element = document.getElementById(elementId);
+            element.textContent = text;
+            element.className = 'trend ' + trendClass;
+        }
+        
+        function formatNumber(num) {
+            if (typeof num !== 'number') return '--';
+            if (Math.abs(num) >= 1000000) {
+                return (num / 1000000).toFixed(1) + 'M';
+            } else if (Math.abs(num) >= 1000) {
+                return (num / 1000).toFixed(1) + 'K';
+            }
+            return num.toLocaleString();
+        }
+        
+        function findClosestIndex(data, targetTimestamp) {
+            let closestIndex = -1;
+            let minDiff = Infinity;
+            
+            for (let i = 0; i < data.length; i++) {
+                const diff = Math.abs(data[i].timestamp - targetTimestamp);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    closestIndex = i;
+                }
+            }
+            
+            return closestIndex;
+        }
+        
+        // ==================== 圖表功能 ====================
         function updateChart(labels, viewCounts) {
             const ctx = document.getElementById('viewChart').getContext('2d');
-
+            
             if (chart) {
                 chart.destroy();
             }
-
+            
+            // 判斷是否為移動設備
+            const isMobile = window.innerWidth <= 768;
+            
             chart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: labels, // X 軸標籤 (時間)
+                    labels: labels,
                     datasets: [{
                         label: '播放量',
-                        data: viewCounts, // Y 軸數據 (播放數)
-                        borderColor: 'rgb(75, 192, 192)',
-                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        data: viewCounts,
+                        borderColor: 'rgb(0, 112, 243)',
+                        backgroundColor: 'rgba(0, 112, 243, 0.1)',
+                        borderWidth: 2,
                         fill: true,
-                        tension: 0.1
+                        tension: 0.2,
+                        pointRadius: isMobile ? 2 : 3,
+                        pointHoverRadius: isMobile ? 4 : 6
                     }]
                 },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                font: {
+                                    size: isMobile ? 12 : 14
+                                }
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            bodyFont: {
+                                size: isMobile ? 12 : 14
+                            },
+                            titleFont: {
+                                size: isMobile ? 11 : 13
+                            }
+                        }
+                    },
                     scales: {
                         x: {
                             title: {
                                 display: true,
-                                text: '時間'
+                                text: '時間',
+                                font: {
+                                    size: isMobile ? 12 : 14
+                                }
+                            },
+                            ticks: {
+                                maxTicksLimit: isMobile ? 6 : 10,
+                                font: {
+                                    size: isMobile ? 10 : 12
+                                }
                             }
                         },
                         y: {
                             title: {
                                 display: true,
-                                text: '播放量'
-                            }
+                                text: '播放量',
+                                font: {
+                                    size: isMobile ? 12 : 14
+                                }
+                            },
+                            ticks: {
+                                font: {
+                                    size: isMobile ? 10 : 12
+                                },
+                                callback: function(value) {
+                                    return formatNumber(value);
+                                }
+                            },
+                            beginAtZero: true
                         }
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'nearest'
                     }
                 }
             });
         }
-
+        
+        // ==================== 表格功能 ====================
         function updateTable(tableRows) {
+            // 清空表格
+            dataTableBody.innerHTML = '';
+            
             // 反轉順序，讓最新的在最上面
             const reversedRows = tableRows.reverse();
             
-            reversedRows.forEach(row => {
+            // 只顯示最近50筆記錄（避免表格過長）
+            const displayRows = reversedRows.slice(0, 50);
+            
+            displayRows.forEach(row => {
                 const tr = document.createElement('tr');
                 
+                // 日期時間
                 const tdDateTime = document.createElement('td');
                 tdDateTime.textContent = row.dateTime;
                 
+                // 播放量
                 const tdViewCount = document.createElement('td');
-                tdViewCount.textContent = row.viewCount;
+                tdViewCount.textContent = formatNumber(row.viewCount);
                 
+                // 變化量
                 const tdChange = document.createElement('td');
-                tdChange.textContent = row.change > 0 ? '+' + row.change : row.change; // 顯示正負號
+                const changeText = row.change > 0 ? '+' + formatNumber(row.change) : formatNumber(row.change);
+                tdChange.textContent = changeText;
                 
-                // 根據變化量添加 CSS 類別以改變顏色
+                // 根據變化量添加樣式
                 if (row.change > 0) {
                     tdChange.classList.add('change-positive');
                 } else if (row.change < 0) {
@@ -259,16 +806,151 @@
                 
                 dataTableBody.appendChild(tr);
             });
+            
+            // 如果數據被截斷，顯示提示
+            if (reversedRows.length > 50) {
+                const tr = document.createElement('tr');
+                const td = document.createElement('td');
+                td.colSpan = 3;
+                td.style.textAlign = 'center';
+                td.style.fontStyle = 'italic';
+                td.style.color = 'var(--secondary-color)';
+                td.textContent = `... 僅顯示最近50筆記錄，共 ${reversedRows.length} 筆`;
+                tr.appendChild(td);
+                dataTableBody.appendChild(tr);
+            }
         }
-
+        
+        // ==================== 自動刷新功能 ====================
+        function setupAutoRefresh() {
+            const checkbox = document.getElementById('autoRefreshCheckbox');
+            const intervalSelect = document.getElementById('refreshInterval');
+            
+            // 從本地存儲恢復設置
+            const savedSetting = localStorage.getItem('autoRefreshEnabled');
+            if (savedSetting === 'true') {
+                checkbox.checked = true;
+                isAutoRefreshEnabled = true;
+                startAutoRefresh();
+            }
+            
+            const savedInterval = localStorage.getItem('refreshInterval');
+            if (savedInterval) {
+                intervalSelect.value = savedInterval;
+            }
+            
+            // 監聽設置變化
+            checkbox.addEventListener('change', function(e) {
+                isAutoRefreshEnabled = e.target.checked;
+                localStorage.setItem('autoRefreshEnabled', isAutoRefreshEnabled);
+                
+                if (isAutoRefreshEnabled) {
+                    startAutoRefresh();
+                } else {
+                    stopAutoRefresh();
+                    document.getElementById('nextRefreshInfo').textContent = '';
+                }
+            });
+            
+            intervalSelect.addEventListener('change', function() {
+                localStorage.setItem('refreshInterval', this.value);
+                if (isAutoRefreshEnabled) {
+                    startAutoRefresh(); // 重新啟動以應用新間隔
+                }
+            });
+        }
+        
+        function startAutoRefresh() {
+            // 清理現有的定時器
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+            }
+            
+            // 獲取間隔時間
+            const minutes = parseInt(document.getElementById('refreshInterval').value);
+            const intervalMs = minutes * 60 * 1000;
+            
+            console.log(`✅ 自動刷新已啟用: 每 ${minutes} 分鐘`);
+            
+            // 立即執行一次
+            loadChartData();
+            
+            // 設置定時器
+            autoRefreshInterval = setInterval(() => {
+                console.log(`🔄 自動刷新執行於 ${new Date().toLocaleTimeString()}`);
+                loadChartData();
+            }, intervalMs);
+            
+            // 更新下次刷新時間顯示
+            updateNextRefreshTime();
+        }
+        
+        function stopAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
+            console.log('⏹️ 自動刷新已停止');
+        }
+        
+        function updateNextRefreshTime() {
+            const nextRefreshEl = document.getElementById('nextRefreshInfo');
+            if (!nextRefreshEl || !isAutoRefreshEnabled) return;
+            
+            const minutes = parseInt(document.getElementById('refreshInterval').value);
+            const nextTime = new Date(Date.now() + minutes * 60 * 1000);
+            const timeStr = nextTime.toLocaleTimeString('zh-TW', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: false 
+            });
+            nextRefreshEl.textContent = `下次刷新: ${timeStr}`;
+        }
+        
+        // ==================== 事件監聽器 ====================
         document.getElementById('refreshButton').addEventListener('click', loadChartData);
-
-        // 頁面載入時載入數據
-        loadChartData();
-
-        // 每小時自動刷新一次圖表與表格 (可選)
-        // setInterval(loadChartData, 3600000);
-
+        
+        // 窗口大小改變時重新調整圖表
+        window.addEventListener('resize', function() {
+            if (chart) {
+                chart.resize();
+            }
+        });
+        
+        // 頁面離開時清理資源
+        window.addEventListener('beforeunload', function() {
+            stopAutoRefresh();
+        });
+        
+        // 頁面可見性變化時暫停/恢復自動刷新
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                // 頁面隱藏時暫停計時器
+                if (autoRefreshInterval) {
+                    clearInterval(autoRefreshInterval);
+                    autoRefreshInterval = null;
+                }
+            } else if (isAutoRefreshEnabled) {
+                // 頁面恢復可見時重啟計時器
+                startAutoRefresh();
+            }
+        });
+        
+        // ==================== 初始化 ====================
+        document.addEventListener('DOMContentLoaded', function() {
+            // 設置自動刷新
+            setupAutoRefresh();
+            
+            // 初始加載數據
+            loadChartData();
+            
+            // 每分鐘更新一次下次刷新時間顯示
+            setInterval(() => {
+                if (isAutoRefreshEnabled) {
+                    updateNextRefreshTime();
+                }
+            }, 60000);
+        });
     </script>
 </body>
 </html>
