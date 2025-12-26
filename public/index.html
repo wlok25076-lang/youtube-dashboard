@@ -131,8 +131,8 @@
         /* ========== 数据统计卡片 ========== */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 15px;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
             margin: 25px 0;
         }
         
@@ -295,16 +295,16 @@
             }
             
             .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 12px;
+                grid-template-columns: 1fr;
+                gap: 15px;
             }
             
             .stat-card {
-                padding: 15px;
+                padding: 20px;
             }
             
             .stat-card .value {
-                font-size: 22px;
+                font-size: 26px;
             }
             
             #chartContainer, #dataTableContainer {
@@ -326,10 +326,6 @@
         }
         
         @media (max-width: 480px) {
-            .stats-grid {
-                grid-template-columns: 1fr;
-            }
-            
             #viewChart {
                 height: 250px !important;
             }
@@ -379,7 +375,7 @@
             <span class="loading"></span>載入中...
         </div>
         
-        <!-- 数据统计卡片 -->
+        <!-- 数据统计卡片（移除數據點數） -->
         <div class="stats-grid" id="statsCards">
             <div class="stat-card">
                 <h3>🎯 當前播放量</h3>
@@ -395,11 +391,6 @@
                 <h3>⏱️ 平均每小時</h3>
                 <p class="value" id="avgHourly">--</p>
                 <div class="trend neutral" id="hourlyTrend">--</div>
-            </div>
-            <div class="stat-card">
-                <h3>📊 數據點數</h3>
-                <p class="value" id="dataPoints">--</p>
-                <div class="trend neutral">最近7天</div>
             </div>
         </div>
         
@@ -434,6 +425,40 @@
         let lastUpdateTime = null;
         const statusDiv = document.getElementById('status');
         const dataTableBody = document.querySelector('#dataTable tbody');
+        
+        // ==================== 辅助函数 ====================
+        function formatNumber(num) {
+            if (typeof num !== 'number' || isNaN(num)) return '--';
+            if (Math.abs(num) >= 1000000) {
+                return (num / 1000000).toFixed(1) + 'M';
+            } else if (Math.abs(num) >= 1000) {
+                return (num / 1000).toFixed(1) + 'K';
+            }
+            return num.toLocaleString();
+        }
+        
+        function updateTrendElement(elementId, text, trendClass) {
+            const element = document.getElementById(elementId);
+            if (element) {
+                element.textContent = text;
+                element.className = 'trend ' + trendClass;
+            }
+        }
+        
+        function findClosestIndex(data, targetTimestamp) {
+            let closestIndex = -1;
+            let minDiff = Infinity;
+            
+            for (let i = 0; i < data.length; i++) {
+                const diff = Math.abs(data[i].timestamp - targetTimestamp);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    closestIndex = i;
+                }
+            }
+            
+            return closestIndex;
+        }
         
         // ==================== 主函数：加载图表数据 ====================
         async function loadChartData() {
@@ -486,7 +511,6 @@
                 document.getElementById('currentViews').textContent = '錯誤';
                 document.getElementById('todayGrowth').textContent = '--';
                 document.getElementById('avgHourly').textContent = '--';
-                document.getElementById('dataPoints').textContent = '--';
                 
                 // 清空表格
                 dataTableBody.innerHTML = '<tr><td colspan="3">加載數據失敗，請稍後重試</td></tr>';
@@ -585,17 +609,26 @@
             
             let todayGrowth = 0;
             let todayTrend = 'neutral';
+            let todayGrowthPercent = 0;
+            
             if (todayData.length >= 2) {
                 const firstToday = todayData[0].viewCount;
                 const lastToday = todayData[todayData.length - 1].viewCount;
                 todayGrowth = lastToday - firstToday;
+                
+                // 计算增长率
+                if (firstToday > 0) {
+                    todayGrowthPercent = (todayGrowth / firstToday * 100).toFixed(1);
+                }
                 
                 document.getElementById('todayGrowth').textContent = 
                     (todayGrowth > 0 ? '+' : '') + formatNumber(todayGrowth);
                 
                 todayTrend = todayGrowth > 0 ? 'positive' : todayGrowth < 0 ? 'negative' : 'neutral';
                 updateTrendElement('todayTrend', 
-                    todayGrowth > 0 ? `今日持續增長` : todayGrowth < 0 ? `今日下降` : `今日持平`,
+                    todayGrowthPercent !== 0 ? 
+                        `今日${todayGrowth > 0 ? '增長' : '減少'} ${Math.abs(todayGrowthPercent)}%` : 
+                        `今日持平`,
                     todayTrend
                 );
             } else {
@@ -625,54 +658,19 @@
                 document.getElementById('avgHourly').textContent = '--';
                 updateTrendElement('hourlyTrend', '數據不足', 'neutral');
             }
-            
-            // 4. 數據點數
-            document.getElementById('dataPoints').textContent = sortedData.length;
         }
         
         function resetStatsCards() {
             document.getElementById('currentViews').textContent = '--';
             document.getElementById('todayGrowth').textContent = '--';
             document.getElementById('avgHourly').textContent = '--';
-            document.getElementById('dataPoints').textContent = '--';
             
             updateTrendElement('currentTrend', '無數據', 'neutral');
             updateTrendElement('todayTrend', '無數據', 'neutral');
             updateTrendElement('hourlyTrend', '無數據', 'neutral');
         }
         
-        function updateTrendElement(elementId, text, trendClass) {
-            const element = document.getElementById(elementId);
-            element.textContent = text;
-            element.className = 'trend ' + trendClass;
-        }
-        
-        function formatNumber(num) {
-            if (typeof num !== 'number') return '--';
-            if (Math.abs(num) >= 1000000) {
-                return (num / 1000000).toFixed(1) + 'M';
-            } else if (Math.abs(num) >= 1000) {
-                return (num / 1000).toFixed(1) + 'K';
-            }
-            return num.toLocaleString();
-        }
-        
-        function findClosestIndex(data, targetTimestamp) {
-            let closestIndex = -1;
-            let minDiff = Infinity;
-            
-            for (let i = 0; i < data.length; i++) {
-                const diff = Math.abs(data[i].timestamp - targetTimestamp);
-                if (diff < minDiff) {
-                    minDiff = diff;
-                    closestIndex = i;
-                }
-            }
-            
-            return closestIndex;
-        }
-        
-        // ==================== 圖表功能 ====================
+        // ==================== 圖表功能（Y軸智能缩放）====================
         function updateChart(labels, viewCounts) {
             const ctx = document.getElementById('viewChart').getContext('2d');
             
@@ -680,7 +678,33 @@
                 chart.destroy();
             }
             
-            // 判斷是否為移動設備
+            // 智能计算Y轴范围，让变化更明显
+            const minValue = Math.min(...viewCounts);
+            const maxValue = Math.max(...viewCounts);
+            const range = maxValue - minValue;
+            
+            // 计算合适的Y轴范围
+            let suggestedMin, suggestedMax;
+            
+            if (range === 0) {
+                // 如果所有值都相同
+                suggestedMin = minValue - 100;
+                suggestedMax = minValue + 100;
+            } else if (range < 50) {
+                // 变化很小的情况：扩大显示范围
+                suggestedMin = minValue - range * 0.5;
+                suggestedMax = maxValue + range * 0.5;
+            } else {
+                // 正常情况：留出10%的边距
+                const margin = range * 0.1;
+                suggestedMin = minValue - margin;
+                suggestedMax = maxValue + margin;
+            }
+            
+            // 确保最小值不会小于0（对于播放量）
+            suggestedMin = Math.max(0, suggestedMin);
+            
+            // 判断是否為移動設備
             const isMobile = window.innerWidth <= 768;
             
             chart = new Chart(ctx, {
@@ -692,11 +716,14 @@
                         data: viewCounts,
                         borderColor: 'rgb(0, 112, 243)',
                         backgroundColor: 'rgba(0, 112, 243, 0.1)',
-                        borderWidth: 2,
+                        borderWidth: 3,
                         fill: true,
-                        tension: 0.2,
-                        pointRadius: isMobile ? 2 : 3,
-                        pointHoverRadius: isMobile ? 4 : 6
+                        tension: 0.3,
+                        pointRadius: isMobile ? 3 : 4,
+                        pointHoverRadius: isMobile ? 6 : 8,
+                        pointBackgroundColor: 'rgb(0, 112, 243)',
+                        pointBorderColor: 'white',
+                        pointBorderWidth: 2
                     }]
                 },
                 options: {
@@ -718,6 +745,18 @@
                             },
                             titleFont: {
                                 size: isMobile ? 11 : 13
+                            },
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += formatNumber(context.parsed.y);
+                                    }
+                                    return label;
+                                }
                             }
                         }
                     },
@@ -731,10 +770,13 @@
                                 }
                             },
                             ticks: {
-                                maxTicksLimit: isMobile ? 6 : 10,
+                                maxTicksLimit: isMobile ? 6 : 8,
                                 font: {
                                     size: isMobile ? 10 : 12
                                 }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
                             }
                         },
                         y: {
@@ -745,23 +787,35 @@
                                     size: isMobile ? 12 : 14
                                 }
                             },
+                            suggestedMin: suggestedMin,
+                            suggestedMax: suggestedMax,
                             ticks: {
                                 font: {
                                     size: isMobile ? 10 : 12
                                 },
                                 callback: function(value) {
                                     return formatNumber(value);
-                                }
+                                },
+                                maxTicksLimit: 8
                             },
-                            beginAtZero: true
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
                         }
                     },
                     interaction: {
                         intersect: false,
                         mode: 'nearest'
+                    },
+                    elements: {
+                        line: {
+                            tension: 0.3
+                        }
                     }
                 }
             });
+            
+            console.log(`📈 图表Y轴范围: ${suggestedMin.toLocaleString()} - ${suggestedMax.toLocaleString()}`);
         }
         
         // ==================== 表格功能 ====================
@@ -855,7 +909,7 @@
             intervalSelect.addEventListener('change', function() {
                 localStorage.setItem('refreshInterval', this.value);
                 if (isAutoRefreshEnabled) {
-                    startAutoRefresh(); // 重新啟動以應用新間隔
+                    startAutoRefresh();
                 }
             });
         }
