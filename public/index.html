@@ -459,175 +459,241 @@
             return closestIndex;
         }
         
-// ==================== 主函数：加载图表数据 ====================
-async function loadChartData() {
-  // 显示加载状态
-  statusDiv.innerHTML = '<span class="loading"></span>載入數據中...';
-  document.querySelector('#refreshButton .loading').classList.remove('hidden');
-  document.querySelector('#refreshButton .button-text').textContent = '載入中...';
-  
-  try {
-    const response = await fetch('/api/chart-data');
-    
-    if (!response.ok) {
-      throw new Error(`HTTP 錯誤! 狀態碼: ${response.status}`);
-    }
-    
-    const result = await response.json();
-    console.log('API返回:', result);
-    
-    // ========== 【兼容性處理】支持新舊API格式 ==========
-    let data;
-    let apiStats = null;
-    
-    if (Array.isArray(result)) {
-      // 舊格式：直接是數組（向後兼容）
-      data = result;
-      console.log('✅ 使用舊API格式，數據條數:', data.length);
-    } else if (result && typeof result === 'object') {
-      // 新格式：檢查結構
-      if (result.success === false) {
-        throw new Error(`API錯誤: ${result.error || result.message || '未知錯誤'}`);
-      }
-      
-      if (result.data && Array.isArray(result.data)) {
-        // 標準新格式：從data字段提取
-        data = result.data;
-        apiStats = result.statistics || null;
-        console.log('✅ 使用新API格式，數據條數:', data.length);
-        
-        if (apiStats) {
-          console.log('📊 API提供統計信息:', apiStats);
+        // ==================== 【修改點】主函数：加载图表数据（兼容新舊API格式） ====================
+        async function loadChartData() {
+            // 显示加载状态
+            statusDiv.innerHTML = '<span class="loading"></span>載入數據中...';
+            document.querySelector('#refreshButton .loading').classList.remove('hidden');
+            document.querySelector('#refreshButton .button-text').textContent = '載入中...';
+            
+            try {
+                const response = await fetch('/api/chart-data');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP 錯誤! 狀態碼: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                console.log('API返回:', result);
+                
+                // ========== 【兼容性處理】支持新舊API格式 ==========
+                let data;
+                let apiStats = null;
+                
+                if (Array.isArray(result)) {
+                    // 舊格式：直接是數組（向後兼容）
+                    data = result;
+                    console.log('✅ 使用舊API格式，數據條數:', data.length);
+                } else if (result && typeof result === 'object') {
+                    // 新格式：檢查結構
+                    if (result.success === false) {
+                        throw new Error(`API錯誤: ${result.error || result.message || '未知錯誤'}`);
+                    }
+                    
+                    if (result.data && Array.isArray(result.data)) {
+                        // 標準新格式：從data字段提取
+                        data = result.data;
+                        apiStats = result.statistics || null;
+                        console.log('✅ 使用新API格式，數據條數:', data.length);
+                        
+                        if (apiStats) {
+                            console.log('📊 API提供統計信息:', apiStats);
+                        }
+                    } else if (Array.isArray(result)) {
+                        // 有些API可能直接返回數組（額外檢查）
+                        data = result;
+                        console.log('✅ API直接返回數組，數據條數:', data.length);
+                    } else {
+                        throw new Error(`API返回格式無法識別: ${JSON.stringify(result).substring(0, 200)}`);
+                    }
+                } else {
+                    throw new Error('API返回不是有效的JSON格式');
+                }
+                // ========== 【兼容性處理結束】==========
+                
+                if (!data || data.length === 0) {
+                    statusDiv.textContent = '沒有數據。請確保定時任務已開始記錄。';
+                    updateStatsCards([]);
+                    return;
+                }
+
+                // 處理數據
+                const processedData = processChartData(data);
+                
+                // 更新所有組件
+                updateChart(processedData.sortedData);
+                updateTable(processedData.tableRows);
+                
+                // 優先使用API提供的統計信息，否則自己計算
+                if (apiStats && apiStats.current) {
+                    updateStatsFromAPI(apiStats);
+                } else {
+                    updateStatsCards(data);
+                }
+                
+                // 更新狀態和時間
+                lastUpdateTime = new Date();
+                const timeStr = lastUpdateTime.toLocaleTimeString('zh-TW', { 
+                    hour12: false,
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                const totalRecords = apiStats ? apiStats.summary?.totalRecords : data.length;
+                statusDiv.innerHTML = `✅ 數據已更新: ${lastUpdateTime.toLocaleDateString()} ${timeStr} | 共 ${totalRecords} 筆記錄`;
+                
+                // 如果有自動刷新，更新下次刷新時間
+                if (isAutoRefreshEnabled) {
+                    updateNextRefreshTime();
+                }
+
+            } catch (error) {
+                console.error('獲取圖表數據失敗:', error);
+                statusDiv.innerHTML = `❌ 獲取數據失敗: ${error.message}`;
+                
+                // 更新統計卡片為錯誤狀態
+                document.getElementById('currentViews').textContent = '錯誤';
+                document.getElementById('todayGrowth').textContent = '--';
+                document.getElementById('avgHourly').textContent = '--';
+                
+                updateTrendElement('currentTrend', '連接失敗', 'negative');
+                updateTrendElement('todayTrend', '連接失敗', 'negative');
+                updateTrendElement('hourlyTrend', '連接失敗', 'negative');
+                
+                // 清空表格
+                dataTableBody.innerHTML = '<tr><td colspan="3">加載數據失敗，請稍後重試</td></tr>';
+                
+            } finally {
+                // 恢復按鈕狀態
+                document.querySelector('#refreshButton .loading').classList.add('hidden');
+                document.querySelector('#refreshButton .button-text').textContent = '🔄 刷新數據';
+            }
         }
-      } else if (Array.isArray(result)) {
-        // 有些API可能直接返回數組（額外檢查）
-        data = result;
-        console.log('✅ API直接返回數組，數據條數:', data.length);
-      } else {
-        throw new Error(`API返回格式無法識別: ${JSON.stringify(result).substring(0, 200)}`);
-      }
-    } else {
-      throw new Error('API返回不是有效的JSON格式');
-    }
-    // ========== 【兼容性處理結束】==========
-    
-    if (!data || data.length === 0) {
-      statusDiv.textContent = '沒有數據。請確保定時任務已開始記錄。';
-      updateStatsCards([]);
-      return;
-    }
+        
+        // ==================== 【新增函數】從API統計信息更新卡片 ====================
+        function updateStatsFromAPI(statistics) {
+            if (!statistics) return;
+            
+            // 當前播放量
+            if (statistics.current && statistics.current.viewCount !== undefined) {
+                const currentViews = statistics.current.viewCount;
+                document.getElementById('currentViews').textContent = formatNumberWithCommas(currentViews);
+                
+                // 趨勢指示器（簡化版）
+                let currentTrend = 'neutral';
+                let currentTrendText = '最新數據';
+                
+                if (statistics.changes && statistics.changes.totalChange !== undefined) {
+                    const change = statistics.changes.totalChange;
+                    if (change > 0) {
+                        currentTrend = 'positive';
+                        currentTrendText = `總增長 +${formatNumberWithCommas(change)}`;
+                    } else if (change < 0) {
+                        currentTrend = 'negative';
+                        currentTrendText = `總減少 ${formatNumberWithCommas(change)}`;
+                    }
+                }
+                
+                updateTrendElement('currentTrend', currentTrendText, currentTrend);
+            }
+            
+            // 今日增長
+            if (statistics.changes && statistics.changes.todayChange !== undefined) {
+                const todayChange = statistics.changes.todayChange;
+                document.getElementById('todayGrowth').textContent = 
+                    (todayChange > 0 ? '+' : '') + formatNumberWithCommas(todayChange);
+                
+                const todayTrend = todayChange > 0 ? 'positive' : todayChange < 0 ? 'negative' : 'neutral';
+                const todayPercent = statistics.changes.todayChangePercent || 0;
+                
+                let trendText = '今日';
+                if (todayPercent !== 0) {
+                    trendText += todayChange > 0 ? `增長 ${todayPercent}%` : `減少 ${Math.abs(todayPercent)}%`;
+                } else {
+                    trendText += todayChange > 0 ? '增長' : todayChange < 0 ? '減少' : '持平';
+                }
+                
+                updateTrendElement('todayTrend', trendText, todayTrend);
+            }
+            
+            // 平均每小時
+            if (statistics.changes && statistics.changes.avgHourlyChange !== undefined) {
+                const avgHourly = statistics.changes.avgHourlyChange;
+                document.getElementById('avgHourly').textContent = 
+                    (avgHourly > 0 ? '+' : '') + formatNumberWithCommas(avgHourly);
+                
+                const hourlyTrend = avgHourly > 0 ? 'positive' : avgHourly < 0 ? 'negative' : 'neutral';
+                const trendText = avgHourly > 0 ? '穩定增長' : avgHourly < 0 ? '增長放緩' : '保持平穩';
+                
+                updateTrendElement('hourlyTrend', trendText, hourlyTrend);
+            }
+        }
+        
+        // ==================== 數據處理函數 ====================
+        function processChartData(data) {
+            // 確保數據按時間戳記排序
+            const sortedData = [...data].sort((a, b) => a.timestamp - b.timestamp);
+            
+            // 準備表格數據
+            const tableRows = sortedData.map((item, index) => {
+                let change = 0;
+                if (index > 0) {
+                    change = item.viewCount - sortedData[index - 1].viewCount;
+                }
+                
+                const dateObj = new Date(item.timestamp);
+                const formattedDateTime = dateObj.toLocaleString('zh-TW', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                });
 
-    // 處理數據
-    const processedData = processChartData(data);
-    
-    // 更新所有組件
-    updateChart(processedData.sortedData);
-    updateTable(processedData.tableRows);
-    
-    // 優先使用API提供的統計信息，否則自己計算
-    if (apiStats && apiStats.current) {
-      updateStatsFromAPI(apiStats);
-    } else {
-      updateStatsCards(data);
-    }
-    
-    // 更新狀態和時間
-    lastUpdateTime = new Date();
-    const timeStr = lastUpdateTime.toLocaleTimeString('zh-TW', { 
-      hour12: false,
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-    
-    const totalRecords = apiStats ? apiStats.summary?.totalRecords : data.length;
-    statusDiv.innerHTML = `✅ 數據已更新: ${lastUpdateTime.toLocaleDateString()} ${timeStr} | 共 ${totalRecords} 筆記錄`;
-    
-    // 如果有自動刷新，更新下次刷新時間
-    if (isAutoRefreshEnabled) {
-      updateNextRefreshTime();
-    }
-
-  } catch (error) {
-    console.error('獲取圖表數據失敗:', error);
-    statusDiv.innerHTML = `❌ 獲取數據失敗: ${error.message}`;
-    
-    // 更新統計卡片為錯誤狀態
-    document.getElementById('currentViews').textContent = '錯誤';
-    document.getElementById('todayGrowth').textContent = '--';
-    document.getElementById('avgHourly').textContent = '--';
-    
-    updateTrendElement('currentTrend', '連接失敗', 'negative');
-    updateTrendElement('todayTrend', '連接失敗', 'negative');
-    updateTrendElement('hourlyTrend', '連接失敗', 'negative');
-    
-    // 清空表格
-    dataTableBody.innerHTML = '<tr><td colspan="3">加載數據失敗，請稍後重試</td></tr>';
-    
-  } finally {
-    // 恢復按鈕狀態
-    document.querySelector('#refreshButton .loading').classList.add('hidden');
-    document.querySelector('#refreshButton .button-text').textContent = '🔄 刷新數據';
-  }
-}
-
-// ==================== 新增：從API統計信息更新卡片 ====================
-function updateStatsFromAPI(statistics) {
-  if (!statistics) return;
-  
-  // 當前播放量
-  if (statistics.current && statistics.current.viewCount !== undefined) {
-    const currentViews = statistics.current.viewCount;
-    document.getElementById('currentViews').textContent = formatNumberWithCommas(currentViews);
-    
-    // 趨勢指示器（簡化版）
-    let currentTrend = 'neutral';
-    let currentTrendText = '最新數據';
-    
-    if (statistics.changes && statistics.changes.totalChange !== undefined) {
-      const change = statistics.changes.totalChange;
-      if (change > 0) {
-        currentTrend = 'positive';
-        currentTrendText = `總增長 +${formatNumberWithCommas(change)}`;
-      } else if (change < 0) {
-        currentTrend = 'negative';
-        currentTrendText = `總減少 ${formatNumberWithCommas(change)}`;
-      }
-    }
-    
-    updateTrendElement('currentTrend', currentTrendText, currentTrend);
-  }
-  
-  // 今日增長
-  if (statistics.changes && statistics.changes.todayChange !== undefined) {
-    const todayChange = statistics.changes.todayChange;
-    document.getElementById('todayGrowth').textContent = 
-      (todayChange > 0 ? '+' : '') + formatNumberWithCommas(todayChange);
-    
-    const todayTrend = todayChange > 0 ? 'positive' : todayChange < 0 ? 'negative' : 'neutral';
-    const todayPercent = statistics.changes.todayChangePercent || 0;
-    
-    let trendText = '今日';
-    if (todayPercent !== 0) {
-      trendText += todayChange > 0 ? `增長 ${todayPercent}%` : `減少 ${Math.abs(todayPercent)}%`;
-    } else {
-      trendText += todayChange > 0 ? '增長' : todayChange < 0 ? '減少' : '持平';
-    }
-    
-    updateTrendElement('todayTrend', trendText, todayTrend);
-  }
-  
-  // 平均每小時
-  if (statistics.changes && statistics.changes.avgHourlyChange !== undefined) {
-    const avgHourly = statistics.changes.avgHourlyChange;
-    document.getElementById('avgHourly').textContent = 
-      (avgHourly > 0 ? '+' : '') + formatNumberWithCommas(avgHourly);
-    
-    const hourlyTrend = avgHourly > 0 ? 'positive' : avgHourly < 0 ? 'negative' : 'neutral';
-    const trendText = avgHourly > 0 ? '穩定增長' : avgHourly < 0 ? '增長放緩' : '保持平穩';
-    
-    updateTrendElement('hourlyTrend', trendText, hourlyTrend);
-  }
-}
+                return {
+                    dateTime: formattedDateTime,
+                    viewCount: item.viewCount,
+                    change: change,
+                    timestamp: item.timestamp
+                };
+            });
+            
+            return { tableRows, sortedData };
+        }
+        
+        // ==================== 統計卡片功能（原有計算邏輯） ====================
+        function updateStatsCards(data) {
+            if (!data || data.length === 0) {
+                resetStatsCards();
+                return;
+            }
+            
+            const sortedData = [...data].sort((a, b) => a.timestamp - b.timestamp);
+            const currentData = sortedData[sortedData.length - 1];
+            
+            // 1. 當前播放量
+            const currentViews = currentData.viewCount;
+            document.getElementById('currentViews').textContent = formatNumberWithCommas(currentViews);
+            
+            // 計算趨勢（與1小時前比較）
+            let currentTrend = 'neutral';
+            let currentTrendText = '穩定';
+            if (sortedData.length >= 2) {
+                const prevHourIndex = findClosestIndex(sortedData, Date.now() - 60*60*1000);
+                if (prevHourIndex >= 0) {
+                    const prevViews = sortedData[prevHourIndex].viewCount;
+                    const diff = currentViews - prevViews;
+                    if (diff > 0) {
+                        currentTrend = 'positive';
+                        currentTrendText = `↑ 比1小時前 +${formatNumberWithCommas(diff)}`;
+                    } else if (diff < 0) {
+                        currentTrend = 'negative';
+                        currentTrendText = `↓ 比1小時前 ${formatNumberWithCommas(diff)}`;
+                    }
+                }
+            }
+            updateTrendElement('currentTrend', currentTrendText, currentTrend);
             
             // 2. 今日增長
             const today = new Date().toDateString();
@@ -707,7 +773,7 @@ function updateStatsFromAPI(statistics) {
             
             // 準備圖表數據
             const chartData = sortedData.map(item => ({
-                x: item.timestamp, // 使用時間戳作為X軸
+                x: item.timestamp,
                 y: item.viewCount
             }));
             
@@ -744,9 +810,9 @@ function updateStatsFromAPI(statistics) {
             
             // 根據時間範圍決定時間單位
             let timeUnit = 'hour';
-            if (timeRange > 7 * 24 * 60 * 60 * 1000) { // 超過7天
+            if (timeRange > 7 * 24 * 60 * 60 * 1000) {
                 timeUnit = 'day';
-            } else if (timeRange > 24 * 60 * 60 * 1000) { // 超過1天
+            } else if (timeRange > 24 * 60 * 60 * 1000) {
                 timeUnit = 'day';
             }
             
@@ -816,7 +882,7 @@ function updateStatsFromAPI(statistics) {
                     },
                     scales: {
                         x: {
-                            type: 'time', // 使用時間軸
+                            type: 'time',
                             time: {
                                 unit: timeUnit,
                                 displayFormats: {
@@ -834,7 +900,7 @@ function updateStatsFromAPI(statistics) {
                             },
                             adapters: {
                                 date: {
-                                    locale: window.dateFnsLocale // 使用 date-fns 適配器
+                                    locale: window.dateFnsLocale
                                 }
                             },
                             title: {
