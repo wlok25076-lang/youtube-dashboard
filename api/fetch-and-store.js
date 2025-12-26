@@ -1,4 +1,6 @@
 // api/fetch-and-store.js
+global.URL = require('url').URL;
+global.URLSearchParams = require('url').URLSearchParams;
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3/videos';
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const GIST_ID = process.env.GIST_ID;
