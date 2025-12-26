@@ -362,9 +362,10 @@
                 </label>
                 <select id="refreshInterval">
                     <option value="1">每1分鐘</option>
-                    <option value="5" selected>每5分鐘</option>
+                    <option value="5">每5分鐘</option>
                     <option value="15">每15分鐘</option>
                     <option value="30">每30分鐘</option>
+                    <option value="60" selected>每60分鐘</option>
                 </select>
                 <span class="refresh-info" id="nextRefreshInfo"></span>
             </div>
@@ -375,7 +376,7 @@
             <span class="loading"></span>載入中...
         </div>
         
-        <!-- 数据统计卡片（移除數據點數） -->
+        <!-- 数据统计卡片 -->
         <div class="stats-grid" id="statsCards">
             <div class="stat-card">
                 <h3>🎯 當前播放量</h3>
@@ -427,14 +428,9 @@
         const dataTableBody = document.querySelector('#dataTable tbody');
         
         // ==================== 辅助函数 ====================
-        function formatNumber(num) {
+        function formatNumberWithCommas(num) {
             if (typeof num !== 'number' || isNaN(num)) return '--';
-            if (Math.abs(num) >= 1000000) {
-                return (num / 1000000).toFixed(1) + 'M';
-            } else if (Math.abs(num) >= 1000) {
-                return (num / 1000).toFixed(1) + 'K';
-            }
-            return num.toLocaleString();
+            return num.toLocaleString('zh-TW');
         }
         
         function updateTrendElement(elementId, text, trendClass) {
@@ -485,7 +481,7 @@
                 const processedData = processChartData(data);
                 
                 // 更新所有組件
-                updateChart(processedData.labels, processedData.viewCounts);
+                updateChart(processedData.sortedData); // 傳入完整數據而非處理後的標籤
                 updateTable(processedData.tableRows);
                 updateStatsCards(data);
                 
@@ -527,21 +523,7 @@
             // 確保數據按時間戳記排序
             const sortedData = [...data].sort((a, b) => a.timestamp - b.timestamp);
             
-            // 準備圖表數據
-            const labels = sortedData.map(item => {
-                const date = new Date(item.timestamp);
-                return date.toLocaleString('zh-TW', { 
-                    month: '2-digit', 
-                    day: '2-digit', 
-                    hour: '2-digit', 
-                    minute: '2-digit', 
-                    hour12: false 
-                });
-            });
-            
-            const viewCounts = sortedData.map(item => item.viewCount);
-            
-            // 準備表格數據
+            // 準備表格數據（保持不變）
             const tableRows = sortedData.map((item, index) => {
                 let change = 0;
                 if (index > 0) {
@@ -561,11 +543,12 @@
                 return {
                     dateTime: formattedDateTime,
                     viewCount: item.viewCount,
-                    change: change
+                    change: change,
+                    timestamp: item.timestamp // 保留時間戳
                 };
             });
             
-            return { labels, viewCounts, tableRows, sortedData };
+            return { tableRows, sortedData };
         }
         
         // ==================== 統計卡片功能 ====================
@@ -580,7 +563,7 @@
             
             // 1. 當前播放量
             const currentViews = currentData.viewCount;
-            document.getElementById('currentViews').textContent = formatNumber(currentViews);
+            document.getElementById('currentViews').textContent = formatNumberWithCommas(currentViews);
             
             // 計算趨勢（與1小時前比較）
             let currentTrend = 'neutral';
@@ -592,10 +575,10 @@
                     const diff = currentViews - prevViews;
                     if (diff > 0) {
                         currentTrend = 'positive';
-                        currentTrendText = `↑ 比1小時前 +${formatNumber(diff)}`;
+                        currentTrendText = `↑ 比1小時前 +${formatNumberWithCommas(diff)}`;
                     } else if (diff < 0) {
                         currentTrend = 'negative';
-                        currentTrendText = `↓ 比1小時前 ${formatNumber(diff)}`;
+                        currentTrendText = `↓ 比1小時前 ${formatNumberWithCommas(diff)}`;
                     }
                 }
             }
@@ -616,13 +599,12 @@
                 const lastToday = todayData[todayData.length - 1].viewCount;
                 todayGrowth = lastToday - firstToday;
                 
-                // 计算增长率
                 if (firstToday > 0) {
                     todayGrowthPercent = (todayGrowth / firstToday * 100).toFixed(1);
                 }
                 
                 document.getElementById('todayGrowth').textContent = 
-                    (todayGrowth > 0 ? '+' : '') + formatNumber(todayGrowth);
+                    (todayGrowth > 0 ? '+' : '') + formatNumberWithCommas(todayGrowth);
                 
                 todayTrend = todayGrowth > 0 ? 'positive' : todayGrowth < 0 ? 'negative' : 'neutral';
                 updateTrendElement('todayTrend', 
@@ -647,7 +629,7 @@
                 avgHourly = Math.round(totalGrowth / (last24h.length - 1));
                 
                 document.getElementById('avgHourly').textContent = 
-                    (avgHourly > 0 ? '+' : '') + formatNumber(avgHourly);
+                    (avgHourly > 0 ? '+' : '') + formatNumberWithCommas(avgHourly);
                 
                 const hourlyTrend = avgHourly > 0 ? 'positive' : avgHourly < 0 ? 'negative' : 'neutral';
                 updateTrendElement('hourlyTrend', 
@@ -670,50 +652,56 @@
             updateTrendElement('hourlyTrend', '無數據', 'neutral');
         }
         
-        // ==================== 圖表功能（Y軸智能缩放）====================
-        function updateChart(labels, viewCounts) {
+        // ==================== 圖表功能（時間軸按實際間隔）====================
+        function updateChart(sortedData) {
             const ctx = document.getElementById('viewChart').getContext('2d');
             
             if (chart) {
                 chart.destroy();
             }
             
-            // 智能计算Y轴范围，让变化更明显
+            // 提取時間戳和播放量
+            const timestamps = sortedData.map(item => item.timestamp);
+            const viewCounts = sortedData.map(item => item.viewCount);
+            
+            // 計算時間範圍
+            const minTime = Math.min(...timestamps);
+            const maxTime = Math.max(...timestamps);
+            const timeRange = maxTime - minTime;
+            
+            // 智能計算Y軸範圍
             const minValue = Math.min(...viewCounts);
             const maxValue = Math.max(...viewCounts);
-            const range = maxValue - minValue;
+            const valueRange = maxValue - minValue;
             
-            // 计算合适的Y轴范围
             let suggestedMin, suggestedMax;
             
-            if (range === 0) {
-                // 如果所有值都相同
-                suggestedMin = minValue - 100;
-                suggestedMax = minValue + 100;
-            } else if (range < 50) {
-                // 变化很小的情况：扩大显示范围
-                suggestedMin = minValue - range * 0.5;
-                suggestedMax = maxValue + range * 0.5;
+            if (valueRange === 0) {
+                suggestedMin = minValue * 0.99;
+                suggestedMax = minValue * 1.01;
+            } else if (valueRange < maxValue * 0.01) {
+                suggestedMin = minValue - valueRange * 2;
+                suggestedMax = maxValue + valueRange * 2;
             } else {
-                // 正常情况：留出10%的边距
-                const margin = range * 0.1;
+                const margin = valueRange * 0.05;
                 suggestedMin = minValue - margin;
                 suggestedMax = maxValue + margin;
             }
             
-            // 确保最小值不会小于0（对于播放量）
             suggestedMin = Math.max(0, suggestedMin);
             
-            // 判断是否為移動設備
+            // 判斷是否為移動設備
             const isMobile = window.innerWidth <= 768;
             
             chart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: labels,
                     datasets: [{
                         label: '播放量',
-                        data: viewCounts,
+                        data: sortedData.map(item => ({
+                            x: item.timestamp, // 使用實際時間戳作為X值
+                            y: item.viewCount
+                        })),
                         borderColor: 'rgb(0, 112, 243)',
                         backgroundColor: 'rgba(0, 112, 243, 0.1)',
                         borderWidth: 3,
@@ -747,13 +735,26 @@
                                 size: isMobile ? 11 : 13
                             },
                             callbacks: {
+                                title: function(context) {
+                                    // 在tooltip中顯示完整日期時間
+                                    const timestamp = context[0].parsed.x;
+                                    const date = new Date(timestamp);
+                                    return date.toLocaleString('zh-TW', {
+                                        year: 'numeric',
+                                        month: '2-digit',
+                                        day: '2-digit',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        hour12: false
+                                    });
+                                },
                                 label: function(context) {
                                     let label = context.dataset.label || '';
                                     if (label) {
                                         label += ': ';
                                     }
                                     if (context.parsed.y !== null) {
-                                        label += formatNumber(context.parsed.y);
+                                        label += context.parsed.y.toLocaleString('zh-TW');
                                     }
                                     return label;
                                 }
@@ -762,6 +763,17 @@
                     },
                     scales: {
                         x: {
+                            type: 'time', // 使用時間軸
+                            time: {
+                                unit: 'hour', // 自動選擇時間單位
+                                displayFormats: {
+                                    hour: 'MM/dd HH:mm',
+                                    day: 'MM/dd',
+                                    week: 'MM/dd',
+                                    month: 'yyyy/MM'
+                                },
+                                tooltipFormat: 'yyyy/MM/dd HH:mm'
+                            },
                             title: {
                                 display: true,
                                 text: '時間',
@@ -773,11 +785,17 @@
                                 maxTicksLimit: isMobile ? 6 : 8,
                                 font: {
                                     size: isMobile ? 10 : 12
-                                }
+                                },
+                                // 根據時間範圍自動調整刻度
+                                autoSkip: true,
+                                maxRotation: 0
                             },
                             grid: {
                                 color: 'rgba(0, 0, 0, 0.05)'
-                            }
+                            },
+                            // 根據實際數據範圍調整
+                            min: minTime,
+                            max: maxTime
                         },
                         y: {
                             title: {
@@ -794,7 +812,7 @@
                                     size: isMobile ? 10 : 12
                                 },
                                 callback: function(value) {
-                                    return formatNumber(value);
+                                    return value.toLocaleString('zh-TW');
                                 },
                                 maxTicksLimit: 8
                             },
@@ -815,7 +833,8 @@
                 }
             });
             
-            console.log(`📈 图表Y轴范围: ${suggestedMin.toLocaleString()} - ${suggestedMax.toLocaleString()}`);
+            console.log(`📈 時間範圍: ${new Date(minTime).toLocaleString()} - ${new Date(maxTime).toLocaleString()}`);
+            console.log(`📈 Y軸範圍: ${suggestedMin.toLocaleString()} - ${suggestedMax.toLocaleString()}`);
         }
         
         // ==================== 表格功能 ====================
@@ -824,9 +843,9 @@
             dataTableBody.innerHTML = '';
             
             // 反轉順序，讓最新的在最上面
-            const reversedRows = tableRows.reverse();
+            const reversedRows = [...tableRows].reverse();
             
-            // 只顯示最近50筆記錄（避免表格過長）
+            // 只顯示最近50筆記錄
             const displayRows = reversedRows.slice(0, 50);
             
             displayRows.forEach(row => {
@@ -838,14 +857,15 @@
                 
                 // 播放量
                 const tdViewCount = document.createElement('td');
-                tdViewCount.textContent = formatNumber(row.viewCount);
+                tdViewCount.textContent = formatNumberWithCommas(row.viewCount);
                 
                 // 變化量
                 const tdChange = document.createElement('td');
-                const changeText = row.change > 0 ? '+' + formatNumber(row.change) : formatNumber(row.change);
+                const changeText = row.change > 0 ? 
+                    '+' + formatNumberWithCommas(row.change) : 
+                    formatNumberWithCommas(row.change);
                 tdChange.textContent = changeText;
                 
-                // 根據變化量添加樣式
                 if (row.change > 0) {
                     tdChange.classList.add('change-positive');
                 } else if (row.change < 0) {
@@ -861,7 +881,6 @@
                 dataTableBody.appendChild(tr);
             });
             
-            // 如果數據被截斷，顯示提示
             if (reversedRows.length > 50) {
                 const tr = document.createElement('tr');
                 const td = document.createElement('td');
@@ -880,7 +899,6 @@
             const checkbox = document.getElementById('autoRefreshCheckbox');
             const intervalSelect = document.getElementById('refreshInterval');
             
-            // 從本地存儲恢復設置
             const savedSetting = localStorage.getItem('autoRefreshEnabled');
             if (savedSetting === 'true') {
                 checkbox.checked = true;
@@ -893,7 +911,6 @@
                 intervalSelect.value = savedInterval;
             }
             
-            // 監聽設置變化
             checkbox.addEventListener('change', function(e) {
                 isAutoRefreshEnabled = e.target.checked;
                 localStorage.setItem('autoRefreshEnabled', isAutoRefreshEnabled);
@@ -915,27 +932,22 @@
         }
         
         function startAutoRefresh() {
-            // 清理現有的定時器
             if (autoRefreshInterval) {
                 clearInterval(autoRefreshInterval);
             }
             
-            // 獲取間隔時間
             const minutes = parseInt(document.getElementById('refreshInterval').value);
             const intervalMs = minutes * 60 * 1000;
             
             console.log(`✅ 自動刷新已啟用: 每 ${minutes} 分鐘`);
             
-            // 立即執行一次
             loadChartData();
             
-            // 設置定時器
             autoRefreshInterval = setInterval(() => {
                 console.log(`🔄 自動刷新執行於 ${new Date().toLocaleTimeString()}`);
                 loadChartData();
             }, intervalMs);
             
-            // 更新下次刷新時間顯示
             updateNextRefreshTime();
         }
         
@@ -964,41 +976,32 @@
         // ==================== 事件監聽器 ====================
         document.getElementById('refreshButton').addEventListener('click', loadChartData);
         
-        // 窗口大小改變時重新調整圖表
         window.addEventListener('resize', function() {
             if (chart) {
                 chart.resize();
             }
         });
         
-        // 頁面離開時清理資源
         window.addEventListener('beforeunload', function() {
             stopAutoRefresh();
         });
         
-        // 頁面可見性變化時暫停/恢復自動刷新
         document.addEventListener('visibilitychange', function() {
             if (document.hidden) {
-                // 頁面隱藏時暫停計時器
                 if (autoRefreshInterval) {
                     clearInterval(autoRefreshInterval);
                     autoRefreshInterval = null;
                 }
             } else if (isAutoRefreshEnabled) {
-                // 頁面恢復可見時重啟計時器
                 startAutoRefresh();
             }
         });
         
         // ==================== 初始化 ====================
         document.addEventListener('DOMContentLoaded', function() {
-            // 設置自動刷新
             setupAutoRefresh();
-            
-            // 初始加載數據
             loadChartData();
             
-            // 每分鐘更新一次下次刷新時間顯示
             setInterval(() => {
                 if (isAutoRefreshEnabled) {
                     updateNextRefreshTime();
