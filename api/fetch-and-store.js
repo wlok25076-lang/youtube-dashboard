@@ -103,6 +103,7 @@ export default async function handler(req, res) {
     const viewCount = parseInt(youtubeData.items[0].statistics.viewCount, 10);
     const timestamp = Date.now();
     const currentDate = new Date(timestamp).toISOString().split('T')[0];
+    const currentHour = new Date(timestamp).getHours(); // 獲取當前小時
 
     // 5. 讀取現有 Gist 數據
     const gistResponse = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
@@ -138,26 +139,30 @@ export default async function handler(req, res) {
       }
     }
 
-    // 6. 新增數據 (可選：避免同一天重複)
-    const todayEntryIndex = currentData.findIndex(entry => entry.date === currentDate);
+    // ========== 【核心修改部分】==========
+    // 6. 新增數據（始終添加新記錄，不做重複檢查）
     const newEntry = { 
       timestamp, 
       viewCount, 
       date: currentDate,
-      videoId: VIDEO_ID // 新增影片ID便於辨識
+      hour: currentHour, // 添加小時字段，便於分析
+      videoId: VIDEO_ID
     };
 
-    if (todayEntryIndex >= 0) {
-      // 如果今天已有記錄，則覆蓋
-      currentData[todayEntryIndex] = newEntry;
-      console.log(`更新了今天的記錄: ${currentDate} - ${viewCount} 次觀看`);
-    } else {
-      // 否則新增
-      currentData.push(newEntry);
-      console.log(`新增記錄: ${currentDate} - ${viewCount} 次觀看`);
-    }
+    // 直接添加新記錄
+    currentData.push(newEntry);
+    console.log(`✅ 新增記錄: ${currentDate} ${currentHour}:00 - ${viewCount} 次觀看 (總計: ${currentData.length} 條記錄)`);
 
-    // 按時間戳記排序
+    // 【可選】自動清理舊數據（保留最近7天，防止數據無限增長）
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000; // 7天前的時間戳
+    const freshData = currentData.filter(item => item.timestamp > sevenDaysAgo);
+    if (freshData.length < currentData.length) {
+      console.log(`🧹 清理了 ${currentData.length - freshData.length} 條過期記錄（7天前）`);
+      currentData = freshData;
+    }
+    // ========== 【修改結束】==========
+
+    // 按時間戳記排序（確保數據按時間順序）
     currentData.sort((a, b) => a.timestamp - b.timestamp);
 
     // 7. 更新 Gist
@@ -186,7 +191,7 @@ export default async function handler(req, res) {
       });
     }
 
-    console.log(`✅ 成功儲存數據: ${VIDEO_ID} - ${viewCount} 次觀看 (${currentDate})`);
+    console.log(`📊 成功儲存數據: ${VIDEO_ID} - ${viewCount} 次觀看 (${currentDate} ${currentHour}:00)`);
 
     // 8. 成功回應
     res.status(200).json({ 
@@ -194,7 +199,9 @@ export default async function handler(req, res) {
       message: '數據獲取並儲存成功',
       data: newEntry,
       gistUpdated: true,
-      totalEntries: currentData.length
+      totalEntries: currentData.length,
+      // 新增提示信息
+      note: '此版本會保留所有記錄，建議定期檢查Gist文件大小'
     });
 
   } catch (error) {
