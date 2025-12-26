@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YouTube 播放量儀表板</title>
+    <!-- 添加 Chart.js 和 date-fns 適配器 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@3.6.0/+esm"></script>
     <style>
         :root {
             --primary-color: #0070f3;
@@ -481,7 +484,7 @@
                 const processedData = processChartData(data);
                 
                 // 更新所有組件
-                updateChart(processedData.sortedData); // 傳入完整數據而非處理後的標籤
+                updateChart(processedData.sortedData);
                 updateTable(processedData.tableRows);
                 updateStatsCards(data);
                 
@@ -523,7 +526,7 @@
             // 確保數據按時間戳記排序
             const sortedData = [...data].sort((a, b) => a.timestamp - b.timestamp);
             
-            // 準備表格數據（保持不變）
+            // 準備表格數據
             const tableRows = sortedData.map((item, index) => {
                 let change = 0;
                 if (index > 0) {
@@ -544,7 +547,7 @@
                     dateTime: formattedDateTime,
                     viewCount: item.viewCount,
                     change: change,
-                    timestamp: item.timestamp // 保留時間戳
+                    timestamp: item.timestamp
                 };
             });
             
@@ -652,7 +655,7 @@
             updateTrendElement('hourlyTrend', '無數據', 'neutral');
         }
         
-        // ==================== 圖表功能（時間軸按實際間隔）====================
+        // ==================== 圖表功能（使用時間軸）====================
         function updateChart(sortedData) {
             const ctx = document.getElementById('viewChart').getContext('2d');
             
@@ -660,16 +663,14 @@
                 chart.destroy();
             }
             
-            // 提取時間戳和播放量
-            const timestamps = sortedData.map(item => item.timestamp);
+            // 準備圖表數據
+            const chartData = sortedData.map(item => ({
+                x: item.timestamp, // 使用時間戳作為X軸
+                y: item.viewCount
+            }));
+            
+            // 計算Y軸範圍
             const viewCounts = sortedData.map(item => item.viewCount);
-            
-            // 計算時間範圍
-            const minTime = Math.min(...timestamps);
-            const maxTime = Math.max(...timestamps);
-            const timeRange = maxTime - minTime;
-            
-            // 智能計算Y軸範圍
             const minValue = Math.min(...viewCounts);
             const maxValue = Math.max(...viewCounts);
             const valueRange = maxValue - minValue;
@@ -693,15 +694,26 @@
             // 判斷是否為移動設備
             const isMobile = window.innerWidth <= 768;
             
+            // 計算時間範圍
+            const timestamps = sortedData.map(item => item.timestamp);
+            const minTime = Math.min(...timestamps);
+            const maxTime = Math.max(...timestamps);
+            const timeRange = maxTime - minTime;
+            
+            // 根據時間範圍決定時間單位
+            let timeUnit = 'hour';
+            if (timeRange > 7 * 24 * 60 * 60 * 1000) { // 超過7天
+                timeUnit = 'day';
+            } else if (timeRange > 24 * 60 * 60 * 1000) { // 超過1天
+                timeUnit = 'day';
+            }
+            
             chart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     datasets: [{
                         label: '播放量',
-                        data: sortedData.map(item => ({
-                            x: item.timestamp, // 使用實際時間戳作為X值
-                            y: item.viewCount
-                        })),
+                        data: chartData,
                         borderColor: 'rgb(0, 112, 243)',
                         backgroundColor: 'rgba(0, 112, 243, 0.1)',
                         borderWidth: 3,
@@ -736,7 +748,6 @@
                             },
                             callbacks: {
                                 title: function(context) {
-                                    // 在tooltip中顯示完整日期時間
                                     const timestamp = context[0].parsed.x;
                                     const date = new Date(timestamp);
                                     return date.toLocaleString('zh-TW', {
@@ -765,14 +776,24 @@
                         x: {
                             type: 'time', // 使用時間軸
                             time: {
-                                unit: 'hour', // 自動選擇時間單位
+                                unit: timeUnit,
                                 displayFormats: {
+                                    millisecond: 'HH:mm:ss',
+                                    second: 'HH:mm:ss',
+                                    minute: 'HH:mm',
                                     hour: 'MM/dd HH:mm',
                                     day: 'MM/dd',
                                     week: 'MM/dd',
-                                    month: 'yyyy/MM'
+                                    month: 'yyyy/MM',
+                                    quarter: 'yyyy/QQQ',
+                                    year: 'yyyy'
                                 },
-                                tooltipFormat: 'yyyy/MM/dd HH:mm'
+                                tooltipFormat: 'yyyy-MM-dd HH:mm'
+                            },
+                            adapters: {
+                                date: {
+                                    locale: window.dateFnsLocale // 使用 date-fns 適配器
+                                }
                             },
                             title: {
                                 display: true,
@@ -786,18 +807,17 @@
                                 font: {
                                     size: isMobile ? 10 : 12
                                 },
-                                // 根據時間範圍自動調整刻度
                                 autoSkip: true,
                                 maxRotation: 0
                             },
                             grid: {
                                 color: 'rgba(0, 0, 0, 0.05)'
                             },
-                            // 根據實際數據範圍調整
                             min: minTime,
                             max: maxTime
                         },
                         y: {
+                            type: 'linear',
                             title: {
                                 display: true,
                                 text: '播放量',
@@ -834,7 +854,7 @@
             });
             
             console.log(`📈 時間範圍: ${new Date(minTime).toLocaleString()} - ${new Date(maxTime).toLocaleString()}`);
-            console.log(`📈 Y軸範圍: ${suggestedMin.toLocaleString()} - ${suggestedMax.toLocaleString()}`);
+            console.log(`📈 使用時間單位: ${timeUnit}`);
         }
         
         // ==================== 表格功能 ====================
