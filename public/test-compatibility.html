@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API兼容性測試</title>
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        .test-case { margin: 15px 0; padding: 10px; border: 1px solid #ddd; }
+        .pass { background: #d4edda; }
+        .fail { background: #f8d7da; }
+        .loading { color: #6c757d; }
+        pre { background: #f8f9fa; padding: 10px; overflow: auto; }
+    </style>
+</head>
+<body>
+    <h1>API兼容性測試</h1>
+    
+    <div class="test-case" id="test1">
+        <h3>測試1：基本API（無參數）</h3>
+        <p>預期：返回數組格式，與舊API兼容</p>
+        <button onclick="runTest(1)">執行測試</button>
+        <div id="result1"></div>
+    </div>
+    
+    <div class="test-case" id="test2">
+        <h3>測試2：新API格式（帶參數）</h3>
+        <p>預期：返回對象格式 {success, data, meta}</p>
+        <button onclick="runTest(2)">執行測試</button>
+        <div id="result2"></div>
+    </div>
+    
+    <div class="test-case" id="test3">
+        <h3>測試3：你的前端代碼模擬</h3>
+        <p>模擬你現有的前端代碼如何調用API</p>
+        <button onclick="runTest(3)">執行測試</button>
+        <div id="result3"></div>
+    </div>
+    
+    <div class="test-case" id="test4">
+        <h3>測試4：圖表數據格式</h3>
+        <p>檢查返回的數據格式是否符合Chart.js要求</p>
+        <button onclick="runTest(4)">執行測試</button>
+        <div id="result4"></div>
+    </div>
+    
+    <script>
+        const API_BASE = ''; // 使用相對路徑
+        
+        async function runTest(testNum) {
+            const resultDiv = document.getElementById(`result${testNum}`);
+            resultDiv.innerHTML = '<span class="loading">測試中...</span>';
+            
+            try {
+                let result;
+                
+                switch(testNum) {
+                    case 1: // 測試基本API
+                        result = await testBasicAPI();
+                        break;
+                    case 2: // 測試新API格式
+                        result = await testNewAPIFormat();
+                        break;
+                    case 3: // 模擬現有前端
+                        result = await simulateFrontend();
+                        break;
+                    case 4: // 測試圖表數據
+                        result = await testChartData();
+                        break;
+                }
+                
+                resultDiv.innerHTML = result;
+                document.getElementById(`test${testNum}`).className = 
+                    result.includes('✅') ? 'test-case pass' : 'test-case fail';
+                    
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="fail">❌ 錯誤: ${error.message}</div>`;
+                document.getElementById(`test${testNum}`).className = 'test-case fail';
+            }
+        }
+        
+        async function testBasicAPI() {
+            const response = await fetch(`${API_BASE}/api/chart-data`);
+            const data = await response.json();
+            
+            let html = `<div><strong>狀態碼:</strong> ${response.status}</div>`;
+            
+            // 檢查是否為數組
+            const isArray = Array.isArray(data);
+            html += `<div>${isArray ? '✅' : '❌'} <strong>返回類型:</strong> ${isArray ? '數組' : typeof data}</div>`;
+            
+            if (isArray) {
+                html += `<div>✅ <strong>數據條數:</strong> ${data.length}</div>`;
+                html += `<div><strong>第一條數據樣例:</strong><br><pre>${JSON.stringify(data[0], null, 2)}</pre></div>`;
+            } else {
+                // 可能是新格式
+                html += `<div>⚠️ <strong>檢測到新格式:</strong></div>`;
+                if (data.data && Array.isArray(data.data)) {
+                    html += `<div>✅ 找到 data 數組 (${data.data.length} 條)</div>`;
+                }
+                html += `<div><pre>${JSON.stringify(data, null, 2)}</pre></div>`;
+            }
+            
+            return html;
+        }
+        
+        async function testNewAPIFormat() {
+            const response = await fetch(`${API_BASE}/api/chart-data?range=24&stats=true`);
+            const data = await response.json();
+            
+            let html = `<div><strong>狀態碼:</strong> ${response.status}</div>`;
+            
+            // 檢查新格式的結構
+            const checks = [
+                { name: 'success字段', check: data.success === true, required: true },
+                { name: 'data數組', check: data.data && Array.isArray(data.data), required: true },
+                { name: 'meta信息', check: data.meta && data.meta.requestedAt, required: true },
+                { name: '統計信息', check: data.statistics, required: false }
+            ];
+            
+            checks.forEach(check => {
+                const icon = check.check ? '✅' : (check.required ? '❌' : '⚠️');
+                html += `<div>${icon} <strong>${check.name}:</strong> ${check.check ? '存在' : '缺失'}</div>`;
+            });
+            
+            if (data.data) {
+                html += `<div><strong>數據條數:</strong> ${data.data.length}</div>`;
+            }
+            
+            return html;
+        }
+        
+        async function simulateFrontend() {
+            // 模擬你現有的前端代碼
+            const codeSnippet = `
+                // 這是你的 loadChartData 函數中的代碼
+                const response = await fetch('/api/chart-data');
+                const data = await response.json();
+                
+                // 1. 檢查數據類型
+                const isArray = Array.isArray(data);
+                
+                // 2. 提取圖表數據（你的代碼預期是數組）
+                const chartData = isArray ? data : (data.data || []);
+                
+                // 3. 處理數據（你的現有邏輯）
+                const labels = chartData.map(item => {
+                    const date = new Date(item.timestamp);
+                    return date.toLocaleString('zh-TW', { 
+                        month: '2-digit', 
+                        day: '2-digit', 
+                        hour: '2-digit', 
+                        minute: '2-digit', 
+                        hour12: false 
+                    });
+                });
+                const viewCounts = chartData.map(item => item.viewCount);
+            `;
+            
+            // 實際執行模擬
+            const response = await fetch(`${API_BASE}/api/chart-data`);
+            const rawData = await response.json();
+            
+            let html = `<div><strong>模擬你的前端代碼執行:</strong></div>`;
+            html += `<div><pre style="font-size:12px">${codeSnippet}</pre></div>`;
+            
+            // 執行檢查
+            const isArray = Array.isArray(rawData);
+            const chartData = isArray ? rawData : (rawData.data || []);
+            
+            html += `<div>${isArray ? '✅' : '⚠️'} <strong>API返回類型:</strong> ${isArray ? '數組 (兼容)' : '對象 (需要適配)'}</div>`;
+            html += `<div>✅ <strong>最終chartData條數:</strong> ${chartData.length}</div>`;
+            
+            if (chartData.length > 0) {
+                // 測試你的數據處理邏輯
+                try {
+                    const labels = chartData.map(item => {
+                        const date = new Date(item.timestamp);
+                        return date.toLocaleString('zh-TW', { 
+                            month: '2-digit', 
+                            day: '2-digit', 
+                            hour: '2-digit', 
+                            minute: '2-digit', 
+                            hour12: false 
+                        });
+                    });
+                    const viewCounts = chartData.map(item => item.viewCount);
+                    
+                    html += `<div>✅ <strong>數據處理成功:</strong></div>`;
+                    html += `<div>生成 ${labels.length} 個標籤</div>`;
+                    html += `<div>生成 ${viewCounts.length} 個數據點</div>`;
+                    html += `<div><strong>前3個標籤:</strong> ${labels.slice(0,3).join(', ')}</div>`;
+                } catch (error) {
+                    html += `<div>❌ <strong>數據處理失敗:</strong> ${error.message}</div>`;
+                }
+            }
+            
+            return html;
+        }
+        
+        async function testChartData() {
+            const response = await fetch(`${API_BASE}/api/chart-data`);
+            const rawData = await response.json();
+            const chartData = Array.isArray(rawData) ? rawData : (rawData.data || []);
+            
+            let html = `<div><strong>圖表數據格式檢查:</strong></div>`;
+            
+            if (chartData.length === 0) {
+                return html + `<div>❌ 沒有數據</div>`;
+            }
+            
+            // 檢查每條數據的結構
+            const sample = chartData[0];
+            const checks = [
+                { field: 'timestamp', type: 'number', description: '時間戳' },
+                { field: 'viewCount', type: 'number', description: '播放量' },
+                { field: 'date', type: 'string', required: false, description: '日期字符串' }
+            ];
+            
+            checks.forEach(check => {
+                const hasField = sample.hasOwnProperty(check.field);
+                const correctType = hasField && typeof sample[check.field] === check.type;
+                
+                let icon = '✅';
+                if (!hasField && check.required !== false) icon = '❌';
+                else if (!correctType) icon = '⚠️';
+                
+                html += `<div>${icon} <strong>${check.field}</strong> (${check.description}): `;
+                if (!hasField) {
+                    html += `缺失`;
+                } else if (!correctType) {
+                    html += `類型錯誤 (期望: ${check.type}, 實際: ${typeof sample[check.field]})`;
+                } else {
+                    html += `正確 (值: ${sample[check.field]})`;
+                }
+                html += `</div>`;
+            });
+            
+            // 檢查時間戳是否有效
+            const validTimestamps = chartData.every(item => 
+                item.timestamp && typeof item.timestamp === 'number' && item.timestamp > 1609459200000
+            );
+            html += `<div>${validTimestamps ? '✅' : '❌'} <strong>時間戳有效性:</strong> ${validTimestamps ? '全部有效' : '可能有無效時間戳'}</div>`;
+            
+            // 檢查viewCount是否為數字
+            const validViewCounts = chartData.every(item => 
+                item.viewCount && typeof item.viewCount === 'number' && item.viewCount > 0
+            );
+            html += `<div>${validViewCounts ? '✅' : '⚠️'} <strong>播放量有效性:</strong> ${validTimestamps ? '全部有效' : '可能有無效數據'}</div>`;
+            
+            return html;
+        }
+    </script>
+</body>
+</html>
