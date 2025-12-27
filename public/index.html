@@ -2317,21 +2317,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }, 60000);
 });
-        
-        // ==================== 【修改】初始化 ====================
-        document.addEventListener('DOMContentLoaded', function() {
-    setupVideoSelector();
-    setupAutoRefresh();
-    setupCompareMode();      // 【新增】初始化比較模式
-    setupExportFunction();   // 【新增】初始化導出功能
-    loadChartData();
-    
-    setInterval(() => {
-        if (isAutoRefreshEnabled) {
-            updateNextRefreshTime();
-        }
-    }, 60000);
-});
     </script>
 </body>
 </html>
