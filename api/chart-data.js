@@ -1,6 +1,19 @@
-// api/chart-data.js
+// api/chart-data.js - 【完整修改版】
 const GIST_ID = process.env.GIST_ID;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+
+// 【新增】導入影片配置
+let TRACKED_VIDEOS = {};
+let ALL_VIDEO_IDS = ['m2ANkjMRuXc']; // 默認值
+
+try {
+    const config = require('./videos-config');
+    TRACKED_VIDEOS = config.TRACKED_VIDEOS;
+    ALL_VIDEO_IDS = config.ALL_VIDEO_IDS;
+    console.log('✅ 載入影片配置成功，追蹤影片數:', ALL_VIDEO_IDS.length);
+} catch (error) {
+    console.warn('⚠️ 無法載入 videos-config.js，使用默認配置:', error.message);
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -14,7 +27,31 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 從Gist讀取數據
+    // 【新增】從查詢參數獲取影片ID，預設第一個影片
+    const { 
+      videoId = ALL_VIDEO_IDS[0],  // 預設第一個影片
+      range,       
+      interval,    
+      stats,       
+      limit        
+    } = req.query;
+
+    console.log(`📡 API請求: videoId=${videoId}, range=${range}, interval=${interval}`);
+
+    // 【新增】驗證影片ID是否在追蹤清單中
+    if (!ALL_VIDEO_IDS.includes(videoId)) {
+      return res.status(400).json({
+        success: false,
+        error: `未追蹤的影片ID: ${videoId}`,
+        availableVideos: ALL_VIDEO_IDS,
+        suggestion: `請使用以下ID之一: ${ALL_VIDEO_IDS.join(', ')}`
+      });
+    }
+
+    // 【修改】從Gist讀取對應影片的數據文件
+    const fileName = `youtube-data-${videoId}.json`;  // 每個影片獨立檔案
+    
+    // 先嘗試讀取影片特定檔案
     const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
       headers: {
         'Authorization': `token ${GITHUB_TOKEN}`,
@@ -29,31 +66,39 @@ export default async function handler(req, res) {
     }
 
     const gistData = await response.json();
-    const fileName = 'youtube-data.json';
     
     let allData = [];
+    
+    // 情況1：找到影片特定檔案
     if (gistData.files && gistData.files[fileName] && gistData.files[fileName].content) {
       try {
         allData = JSON.parse(gistData.files[fileName].content);
+        console.log(`📂 找到 ${fileName}: ${allData.length} 條記錄`);
       } catch (parseError) {
-        console.error('Failed to parse gist content:', parseError);
-        return res.status(500).json({ 
-          error: 'Failed to parse gist data' 
-        });
+        console.error(`解析 ${fileName} 失敗:`, parseError);
+        allData = [];
       }
+    } 
+    // 情況2：沒找到，但可能是舊格式的通用檔案（向後兼容）
+    else if (videoId === 'm2ANkjMRuXc' && gistData.files && gistData.files['youtube-data.json']) {
+      console.log('⚠️ 使用舊格式檔案，將遷移到新格式...');
+      try {
+        allData = JSON.parse(gistData.files['youtube-data.json'].content);
+        console.log(`🔄 從舊格式遷移: ${allData.length} 條記錄`);
+      } catch (parseError) {
+        console.error('解析舊格式檔案失敗:', parseError);
+        allData = [];
+      }
+    }
+    // 情況3：完全沒有數據
+    else {
+      console.log(`📭 沒有找到影片 ${videoId} 的數據，返回空數組`);
     }
 
     // 確保數據按時間排序
     allData.sort((a, b) => a.timestamp - b.timestamp);
 
     // ========== 處理查詢參數 ==========
-    const { 
-      range,       // 時間範圍（小時數）
-      interval,    // 數據間隔
-      stats,       // 是否返回統計信息
-      limit        // 限制返回條數
-    } = req.query;
-
     // 1. 時間範圍篩選
     let filteredData = allData;
     if (range && range !== 'all') {
@@ -61,6 +106,7 @@ export default async function handler(req, res) {
       if (!isNaN(hours) && hours > 0) {
         const cutoffTime = Date.now() - hours * 60 * 60 * 1000;
         filteredData = allData.filter(item => item.timestamp > cutoffTime);
+        console.log(`⏰ 時間範圍篩選: 保留 ${filteredData.length}/${allData.length} 條記錄`);
       }
     }
 
@@ -80,6 +126,8 @@ export default async function handler(req, res) {
       processedData = Array.from(hourlyMap.values())
         .sort((a, b) => a.timestamp - b.timestamp);
         
+      console.log(`🕐 小時間隔處理: ${filteredData.length} → ${processedData.length} 條記錄`);
+        
     } else if (interval === 'daily' && filteredData.length > 0) {
       const dailyMap = new Map();
       filteredData.forEach(item => {
@@ -93,12 +141,15 @@ export default async function handler(req, res) {
       
       processedData = Array.from(dailyMap.values())
         .sort((a, b) => a.timestamp - b.timestamp);
+        
+      console.log(`📅 天間隔處理: ${filteredData.length} → ${processedData.length} 條記錄`);
     }
 
     // 3. 限制返回條數
     if (limit && !isNaN(parseInt(limit))) {
       const limitNum = parseInt(limit);
       processedData = processedData.slice(-limitNum);
+      console.log(`🔢 限制條數: ${limitNum} 條`);
     }
 
     // 4. 計算統計信息
@@ -148,9 +199,19 @@ export default async function handler(req, res) {
           avgViewCount: Math.round(processedData.reduce((sum, d) => sum + d.viewCount, 0) / processedData.length)
         }
       };
+      
+      console.log(`📊 統計信息計算完成`);
     }
 
-    // ========== 【關鍵修改】智能返回格式 ==========
+    // ========== 【新增】獲取影片資訊 ==========
+    const videoInfo = Object.values(TRACKED_VIDEOS).find(v => v.id === videoId) || {
+      id: videoId,
+      name: videoId,
+      color: '#0070f3',
+      description: `YouTube 影片: ${videoId}`
+    };
+
+    // ========== 智能返回格式 ==========
     // 檢查是否有查詢參數
     const hasQueryParams = range || interval || stats || limit;
     
@@ -159,18 +220,25 @@ export default async function handler(req, res) {
     
     if (!hasQueryParams) {
       // 情況1：沒有查詢參數 → 返回舊格式（純數組，完全向後兼容）
-      console.log(`📊 API: 返回舊格式（數組），${processedData.length} 條數據`);
+      console.log(`📊 返回影片 ${videoId} 的舊格式，${processedData.length} 條數據`);
       return res.status(200).json(processedData);
       
     } else {
       // 情況2：有查詢參數 → 返回新格式
-      console.log(`📊 API: 返回新格式（對象），${processedData.length} 條數據，參數：`, { range, interval, stats, limit });
+      console.log(`📊 返回影片 ${videoId} 的新格式，${processedData.length} 條數據`);
       
       const responseData = {
         success: true,
         data: processedData,
+        videoInfo: {
+          id: videoId,
+          name: videoInfo?.name || videoId,
+          color: videoInfo?.color || '#0070f3',
+          description: videoInfo?.description || `YouTube 影片: ${videoId}`
+        },
         meta: {
           requestedAt: new Date().toISOString(),
+          videoId,
           params: { range, interval, stats, limit },
           originalCount: allData.length,
           returnedCount: processedData.length,
@@ -189,7 +257,6 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error('Error in chart-data API:', error);
     
-    // 錯誤時也保持格式一致
     const errorResponse = {
       success: false,
       error: 'Internal server error',
