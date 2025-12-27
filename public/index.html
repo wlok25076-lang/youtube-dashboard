@@ -1853,18 +1853,31 @@ function setupCompareMode() {
 
 // 載入比較數據
 async function loadCompareData(videos) {
+    console.log('🚀 開始載入比較數據，影片:', videos);
+    
     try {
         const compareRange = document.getElementById('compareRange').value;
+        console.log('📅 時間範圍:', compareRange);
+        
         const loadingText = `正在載入 ${videos.length} 個影片的比較數據...`;
         statusDiv.innerHTML = `<span class="loading"></span>${loadingText}`;
         
         // 同時獲取所有影片的數據
+        console.log('🌐 開始發送API請求...');
         const promises = videos.map(video => 
             fetch(`/api/chart-data?videoId=${video.id}&range=${compareRange}&stats=true`)
-                .then(r => r.json())
+                .then(r => {
+                    console.log(`✅ ${video.name} API請求成功`);
+                    return r.json();
+                })
+                .catch(error => {
+                    console.error(`❌ ${video.name} API請求失敗:`, error);
+                    throw error;
+                })
         );
         
         const results = await Promise.all(promises);
+        console.log('📊 API請求完成，結果數量:', results.length);
         
         // 處理數據
         const processedData = results.map((result, index) => {
@@ -1872,11 +1885,17 @@ async function loadCompareData(videos) {
             let data = [];
             let statistics = null;
             
+            console.log(`處理影片 ${video.name} 的數據:`, result);
+            
             if (Array.isArray(result)) {
                 data = result;
-            } else if (result.data) {
+                console.log(`🎯 ${video.name}: 使用舊格式，${data.length} 條數據`);
+            } else if (result && result.data) {
                 data = result.data;
                 statistics = result.statistics;
+                console.log(`🎯 ${video.name}: 使用新格式，${data.length} 條數據`);
+            } else {
+                console.warn(`⚠️ ${video.name}: 無法識別的數據格式`);
             }
             
             return {
@@ -1889,38 +1908,66 @@ async function loadCompareData(videos) {
             };
         });
         
+        console.log('📦 處理後的數據:', processedData);
+        
+        // 檢查是否有數據
+        const hasData = processedData.some(v => v.data.length > 0);
+        console.log('📊 是否有數據:', hasData);
+        
+        if (!hasData) {
+            alert('所有選中的影片都沒有數據，無法比較');
+            statusDiv.innerHTML = '❌ 沒有數據可用於比較';
+            return;
+        }
+        
         // 更新比較界面
+        console.log('🔄 開始更新比較界面...');
         updateCompareUI(processedData);
         
         statusDiv.innerHTML = `✅ 比較數據載入完成 (${videos.length} 個影片)`;
         
     } catch (error) {
-        console.error('載入比較數據失敗:', error);
+        console.error('❌ 載入比較數據失敗:', error);
         statusDiv.innerHTML = `❌ 比較數據載入失敗: ${error.message}`;
+        alert(`比較數據載入失敗: ${error.message}`);
     }
 }
 
 // 更新比較界面
 function updateCompareUI(videoData) {
+     console.log('🎨 updateCompareUI 被調用，數據:', videoData);
+
     // 顯示比較結果區域
     const compareResults = document.getElementById('compareResults');
+    console.log('📌 compareResults 元素:', compareResults);
+
     if (compareResults) {
         compareResults.classList.remove('hidden');
     }
     
+    // 移除 hidden 類
+    compareResults.classList.remove('hidden');
+    console.log('✅ 已移除 hidden 類');
+
     // 隱藏單一圖表
     if (chart) {
         chart.getCanvas().style.display = 'none';
+        console.log('📊 已隱藏單一影片圖表');
     }
     
     // 更新比較圖表
+    console.log('🖼️ 調用 updateCompareChart...');
     updateCompareChart(videoData);
     
     // 更新比較統計
+    console.log('📈 調用 updateCompareStats...');
     updateCompareStats(videoData);
     
     // 更新比較表格
+    console.log('📋 調用 updateCompareTable...');
     updateCompareTable(videoData);
+
+    console.log('🎉 updateCompareUI 完成');
 }
 
 // 更新比較圖表
