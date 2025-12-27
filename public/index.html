@@ -2240,7 +2240,7 @@ function exportCurrentVideoData() {
         });
 }
 
-// 導出比較數據
+// 導出比較數據 - 【修正版】
 async function exportComparisonData() {
     if (comparedVideos.length === 0) {
         alert('請先進行影片比較');
@@ -2248,72 +2248,66 @@ async function exportComparisonData() {
     }
     
     try {
-        const compareRange = document.getElementById('compareRange').value;
-        
-        // 顯示載入狀態
         statusDiv.innerHTML = `<span class="loading"></span>正在準備導出比較數據...`;
         
-        // 【重要修改】同時獲取所有影片的數據
-        console.log('📤 開始導出比較數據，影片數量:', comparedVideos.length);
+        const compareRange = document.getElementById('compareRange').value;
+        const videoIds = comparedVideos.map(v => v.id);
         
+        console.log('導出比較數據:', {
+            影片: comparedVideos.map(v => v.name),
+            時間範圍: compareRange,
+            影片ID: videoIds
+        });
+        
+        // 同時獲取所有影片的數據
         const promises = comparedVideos.map(video => 
             fetch(`/api/chart-data?videoId=${video.id}&range=${compareRange}`)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`${video.name} API請求失敗: ${response.status}`);
-                    }
-                    return response.json();
-                })
+                .then(r => r.json())
                 .then(data => {
-                    console.log(`✅ 獲取 ${video.name} 數據成功`);
-                    return { video, data };
+                    // 統一數據格式
+                    let processedData;
+                    if (Array.isArray(data)) {
+                        processedData = data;
+                    } else if (data && data.data) {
+                        processedData = data.data;
+                    } else {
+                        processedData = [];
+                    }
+                    
+                    // 為每個數據點添加影片ID
+                    return processedData.map(item => ({
+                        ...item,
+                        videoId: video.id,
+                        videoName: video.name
+                    }));
                 })
         );
         
-        const results = await Promise.all(promises);
-        console.log('📊 所有影片數據獲取完成');
+        const allResults = await Promise.all(promises);
         
-        // 處理數據
-        const processedData = results.map(result => {
-            let videoDataArray = [];
-            
-            // 解析數據
-            if (Array.isArray(result.data)) {
-                videoDataArray = result.data;
-            } else if (result.data && result.data.data && Array.isArray(result.data.data)) {
-                videoDataArray = result.data.data;
-            }
-            
-            return {
-                video: result.video,
-                data: videoDataArray
-            };
+        // 合併所有數據
+        const allData = allResults.flat();
+        
+        console.log('合併後的數據:', {
+            總數據量: allData.length,
+            各影片數據量: allResults.map((arr, i) => `${comparedVideos[i].name}: ${arr.length}`)
         });
         
-        console.log('📦 處理後的數據:', processedData);
-        
-        // 檢查是否有數據
-        const hasData = processedData.some(item => item.data.length > 0);
-        if (!hasData) {
-            throw new Error('沒有可導出的數據');
-        }
-        
-        // 創建比較CSV
-        const csvData = createComparisonCSV(processedData);
+        // 創建 CSV
+        const csvData = createComparisonCSV(allData, comparedVideos);
         
         // 生成檔案名
-        const videoNames = comparedVideos.map(v => v.name.substring(0, 10)).join('-');
-        const dateStr = new Date().toISOString().split('T')[0];
-        const filename = `youtube-comparison-${videoNames}-${dateStr}.csv`;
+        const timestamp = new Date().toISOString().slice(0, 19).replace(/[:]/g, '-');
+        const filename = `youtube-comparison-${timestamp}.csv`;
         
         // 下載
         downloadCSV(csvData, filename);
         
-        statusDiv.innerHTML = `✅ 比較數據導出完成`;
+        statusDiv.innerHTML = `✅ 比較數據已導出: ${filename}`;
         
     } catch (error) {
-        console.error('❌ 導出比較數據失敗:', error);
-        statusDiv.innerHTML = `❌ 導出比較數據失敗: ${error.message}`;
+        console.error('導出比較數據失敗:', error);
+        statusDiv.innerHTML = `❌ 導出失敗: ${error.message}`;
         alert(`導出失敗: ${error.message}`);
     }
 }
@@ -2334,46 +2328,78 @@ function convertArrayToCSV(data) {
         .join('\n');
 }
 
-// 創建比較CSV
-function createComparisonCSV(videoDataArray) {
-    console.log('📝 創建比較CSV，輸入數據:', videoDataArray);
-    
-    // 檢查輸入數據
-    if (!videoDataArray || !Array.isArray(videoDataArray)) {
-        console.error('❌ 無效的輸入數據');
-        return '';
-    }
-    
-    // 收集所有影片的所有時間點
-    const allTimePoints = new Set();
-    
-    videoDataArray.forEach(videoData => {
-        if (videoData.data && Array.isArray(videoData.data)) {
-            videoData.data.forEach(item => {
-                if (item && item.timestamp) {
-                    allTimePoints.add(item.timestamp);
-                }
-            });
-        }
+// 創建比較CSV - 【增強版】
+function createComparisonCSV(allData, videos) {
+    console.log('📊 創建比較CSV，輸入數據:', {
+        影片數量: videos.length,
+        總數據量: allData.length,
+        影片列表: videos.map(v => v.name)
     });
     
-    // 轉換為排序後的數組
-    const sortedTimePoints = Array.from(allTimePoints).sort((a, b) => a - b);
-    console.log('⏰ 總時間點數量:', sortedTimePoints.length);
+    // 第一步：按影片分組數據
+    const dataByVideo = {};
+    videos.forEach(video => {
+        // 找到該影片的所有數據
+        const videoData = allData.filter(item => {
+            // 支援多種數據格式
+            if (Array.isArray(item)) {
+                return false; // 跳過數組類型的item
+            }
+            
+            const itemVideoId = item.videoId || item.id || 
+                               (item.video && item.video.id) || 
+                               item.video_id;
+            return itemVideoId === video.id;
+        });
+        
+        // 轉換為時間戳到數據的映射
+        const timeMap = new Map();
+        videoData.forEach(item => {
+            const timestamp = typeof item.timestamp === 'number' 
+                ? item.timestamp 
+                : new Date(item.timestamp).getTime();
+            const viewCount = item.viewCount || item.count || item.views || 0;
+            
+            // 如果同一時間點有多個數據，取最新的
+            if (!timeMap.has(timestamp) || 
+                (item.date && timeMap.get(timestamp).date < item.date)) {
+                timeMap.set(timestamp, {
+                    timestamp,
+                    viewCount,
+                    date: item.date || new Date(timestamp).toISOString()
+                });
+            }
+        });
+        
+        dataByVideo[video.id] = timeMap;
+        console.log(`影片 ${video.name}: ${videoData.length} 筆原始數據，${timeMap.size} 筆唯一時間點`);
+    });
     
-    if (sortedTimePoints.length === 0) {
-        console.warn('⚠️ 沒有時間點數據');
-        return '';
+    // 第二步：收集所有時間點
+    const allTimestamps = new Set();
+    Object.values(dataByVideo).forEach(timeMap => {
+        timeMap.forEach((value, timestamp) => {
+            allTimestamps.add(timestamp);
+        });
+    });
+    
+    // 排序時間點
+    const sortedTimestamps = Array.from(allTimestamps).sort((a, b) => a - b);
+    
+    // 如果時間點太多，進行抽樣（最多保留100個）
+    let displayTimestamps = sortedTimestamps;
+    if (sortedTimestamps.length > 100) {
+        const step = Math.ceil(sortedTimestamps.length / 100);
+        displayTimestamps = sortedTimestamps.filter((_, index) => index % step === 0);
+        console.log(`時間點抽樣: ${sortedTimestamps.length} -> ${displayTimestamps.length}`);
     }
     
-    // 創建標題行
-    const headers = ['時間', ...videoDataArray.map(v => v.video.name)];
+    // 第三步：創建表頭
+    const headers = ['時間', ...videos.map(v => v.name)];
     
-    // 創建數據行
-    const rows = sortedTimePoints.map(timestamp => {
-        // 格式化時間
-        const date = new Date(timestamp);
-        const dateStr = date.toLocaleString('zh-TW', {
+    // 第四步：創建數據行
+    const rows = displayTimestamps.map(timestamp => {
+        const dateStr = new Date(timestamp).toLocaleString('zh-TW', {
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
@@ -2384,42 +2410,52 @@ function createComparisonCSV(videoDataArray) {
         
         const rowData = [dateStr];
         
-        // 為每個影片添加數據
-        videoDataArray.forEach(videoData => {
-            let viewCount = '';
+        // 為每個影片獲取該時間點的數據
+        videos.forEach(video => {
+            const timeMap = dataByVideo[video.id];
+            const dataPoint = timeMap.get(timestamp);
             
-            if (videoData.data && Array.isArray(videoData.data)) {
-                const dataPoint = videoData.data.find(d => d.timestamp === timestamp);
-                if (dataPoint && dataPoint.viewCount !== undefined) {
-                    viewCount = dataPoint.viewCount;
+            if (dataPoint) {
+                rowData.push(dataPoint.viewCount);
+            } else {
+                // 嘗試找到最接近的時間點數據
+                const closestTimestamp = findClosestTimestamp(Array.from(timeMap.keys()), timestamp);
+                if (closestTimestamp !== null) {
+                    const closestData = timeMap.get(closestTimestamp);
+                    rowData.push(closestData.viewCount);
+                } else {
+                    rowData.push(''); // 沒有數據
                 }
             }
-            
-            rowData.push(viewCount);
         });
         
         return rowData;
     });
     
-    console.log('📊 CSV行數:', rows.length);
-    
-    // 轉換為CSV格式
-    const csv = [headers, ...rows]
-        .map(row => row.map(cell => {
-            // 處理特殊字符
-            if (cell === null || cell === undefined || cell === '') {
-                return '';
-            }
-            const cellStr = String(cell);
-            // 如果包含逗號、引號或換行，用引號包圍
-            if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')) {
-                return `"${cellStr.replace(/"/g, '""')}"`;
-            }
-            return cellStr;
-        }).join(','))
+    // 第五步：轉換為 CSV
+    const csvContent = [headers, ...rows]
+        .map(row => row.map(cell => cell === '' ? '' : `"${cell}"`))
+        .map(row => row.join(','))
         .join('\n');
     
-    return csv;
+    console.log('✅ CSV 創建完成，行數:', rows.length + 1);
+    return csvContent;
+}
+
+// 輔助函數：找到最接近的時間戳
+function findClosestTimestamp(timestamps, targetTimestamp, maxDiff = 3600000) { // 1小時內
+    let closest = null;
+    let minDiff = Infinity;
+    
+    timestamps.forEach(timestamp => {
+        const diff = Math.abs(timestamp - targetTimestamp);
+        if (diff < minDiff && diff <= maxDiff) {
+            minDiff = diff;
+            closest = timestamp;
+        }
+    });
+    
+    return closest;
 }
 
 // 下載CSV文件
