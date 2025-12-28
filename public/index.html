@@ -2631,12 +2631,579 @@ async function updateVideoInBackend(videoData) {
                 exportSingleBtn.addEventListener('click', exportCurrentVideoData);
             }
         }
-        
-        // 【以下為原有的比較模式和導出功能的函數，由於篇幅限制，這裡只保留函數定義】
-        // 實際的 loadCompareData, updateCompareUI, updateCompareChart, updateCompareStats,
-        // updateCompareTable, getCommonTimePoints, exportCurrentVideoData, exportComparisonData,
-        // convertArrayToCSV, createComparisonCSV, findClosestTimestamp, downloadCSV 等函數
-        // 請使用原始代碼中的版本，這裡不再重複
+
+        // ==================== 【完整實現】比較模式功能函數 ====================
+
+        // 載入比較數據
+        async function loadCompareData(selectedVideos) {
+            console.log('🔍 載入比較數據:', selectedVideos);
+            
+            // 顯示加載狀態
+            document.getElementById('compareResults').classList.remove('hidden');
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = `<span class="loading"></span>載入比較數據中...`;
+            
+            try {
+                const compareData = {};
+                const timeRange = document.getElementById('compareRange').value;
+                
+                // 載入每個影片的數據
+                for (const video of selectedVideos) {
+                    console.log(`📥 載入影片 ${video.name} (${video.id}) 的數據...`);
+                    
+                    try {
+                        const apiUrl = `/api/chart-data?videoId=${video.id}&range=${timeRange}&stats=true`;
+                        const response = await fetch(apiUrl);
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP錯誤: ${response.status}`);
+                        }
+                        
+                        const result = await response.json();
+                        
+                        // 處理API響應格式
+                        let data;
+                        if (Array.isArray(result)) {
+                            data = result;
+                        } else if (result.data) {
+                            data = result.data;
+                        } else {
+                            data = [];
+                        }
+                        
+                        compareData[video.id] = {
+                            id: video.id,
+                            name: video.name,
+                            color: video.color,
+                            data: data,
+                            statistics: result.statistics || null,
+                            videoInfo: result.videoInfo || { name: video.name, color: video.color }
+                        };
+                        
+                        console.log(`✅ 載入 ${video.name}: ${data.length} 條數據`);
+                        
+                    } catch (error) {
+                        console.error(`❌ 載入影片 ${video.name} 失敗:`, error);
+                        compareData[video.id] = {
+                            id: video.id,
+                            name: video.name,
+                            color: video.color,
+                            data: [],
+                            error: error.message
+                        };
+                    }
+                    
+                    // 避免太快請求
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+                
+                // 更新UI
+                updateCompareUI(compareData);
+                statusDiv.innerHTML = `✅ 比較數據載入完成`;
+                
+            } catch (error) {
+                console.error('❌ 載入比較數據失敗:', error);
+                statusDiv.innerHTML = `❌ 載入比較數據失敗: ${error.message}`;
+            }
+        }
+
+        // 更新比較UI
+        function updateCompareUI(compareData) {
+            console.log('🎨 更新比較UI...');
+            
+            // 1. 更新統計卡片
+            updateCompareStats(compareData);
+            
+            // 2. 更新圖表
+            updateCompareChart(compareData);
+            
+            // 3. 更新表格
+            updateCompareTable(compareData);
+        }
+
+        // 更新比較統計卡片
+        function updateCompareStats(compareData) {
+            const statsGrid = document.querySelector('.compare-stats-grid');
+            statsGrid.innerHTML = '';
+            
+            Object.values(compareData).forEach(videoData => {
+                if (videoData.error || !videoData.data || videoData.data.length === 0) {
+                    const errorCard = document.createElement('div');
+                    errorCard.className = 'compare-stat-card';
+                    errorCard.innerHTML = `
+                        <h4>${videoData.name}</h4>
+                        <div class="compare-stat-value" style="color: #ef4444;">錯誤</div>
+                        <div class="compare-stat-change" style="background-color: rgba(239, 68, 68, 0.15); color: #ef4444;">
+                            載入失敗
+                        </div>
+                    `;
+                    statsGrid.appendChild(errorCard);
+                    return;
+                }
+                
+                const stats = calculateVideoStats(videoData.data);
+                const card = document.createElement('div');
+                card.className = 'compare-stat-card';
+                
+                // 計算變化趨勢
+                let changeClass = 'neutral';
+                let changeText = '穩定';
+                let changeSymbol = '';
+                
+                if (stats.hourlyChange > 0) {
+                    changeClass = 'positive';
+                    changeSymbol = '↑';
+                    changeText = `每小時 +${formatNumberWithCommas(stats.hourlyChange)}`;
+                } else if (stats.hourlyChange < 0) {
+                    changeClass = 'negative';
+                    changeSymbol = '↓';
+                    changeText = `每小時 ${formatNumberWithCommas(stats.hourlyChange)}`;
+                }
+                
+                card.innerHTML = `
+                    <h4>${videoData.name}</h4>
+                    <div class="compare-stat-value" style="color: ${videoData.color}">
+                        ${formatNumberWithCommas(stats.currentViews)}
+                    </div>
+                    <div class="compare-stat-change ${changeClass}">
+                        ${changeSymbol} ${changeText}
+                    </div>
+                `;
+                
+                statsGrid.appendChild(card);
+            });
+        }
+
+        // 計算影片統計
+        function calculateVideoStats(data) {
+            if (!data || data.length === 0) {
+                return {
+                    currentViews: 0,
+                    hourlyChange: 0,
+                    totalChange: 0
+                };
+            }
+            
+            const sortedData = [...data].sort((a, b) => a.timestamp - b.timestamp);
+            const latest = sortedData[sortedData.length - 1];
+            const earliest = sortedData[0];
+            
+            // 計算每小時平均變化
+            const timeDiffHours = (latest.timestamp - earliest.timestamp) / (1000 * 60 * 60);
+            const totalChange = latest.viewCount - earliest.viewCount;
+            const hourlyChange = timeDiffHours > 0 ? Math.round(totalChange / timeDiffHours) : 0;
+            
+            return {
+                currentViews: latest.viewCount,
+                hourlyChange: hourlyChange,
+                totalChange: totalChange,
+                dataPoints: sortedData.length,
+                timeRange: timeDiffHours
+            };
+        }
+
+        // 更新比較圖表
+        function updateCompareChart(compareData) {
+            const ctx = document.getElementById('compareChart').getContext('2d');
+            
+            // 銷毀現有圖表
+            if (window.compareChart) {
+                window.compareChart.destroy();
+            }
+            
+            // 獲取共同的時間點
+            const commonTimePoints = getCommonTimePoints(compareData);
+            
+            // 準備圖表數據集
+            const datasets = [];
+            
+            Object.values(compareData).forEach(videoData => {
+                if (videoData.error || !videoData.data || videoData.data.length === 0) {
+                    return;
+                }
+                
+                // 創建數據點
+                const chartData = commonTimePoints.map(timePoint => {
+                    const closestData = findClosestTimestamp(videoData.data, timePoint);
+                    return {
+                        x: timePoint,
+                        y: closestData ? closestData.viewCount : null
+                    };
+                }).filter(point => point.y !== null);
+                
+                datasets.push({
+                    label: videoData.name,
+                    data: chartData,
+                    borderColor: videoData.color,
+                    backgroundColor: videoData.color + '40',
+                    borderWidth: 3,
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: videoData.color,
+                    pointBorderColor: 'white',
+                    pointBorderWidth: 2
+                });
+            });
+            
+            // 計算Y軸範圍
+            const allViewCounts = [];
+            datasets.forEach(dataset => {
+                dataset.data.forEach(point => {
+                    if (point.y !== null) {
+                        allViewCounts.push(point.y);
+                    }
+                });
+            });
+            
+            const minValue = Math.min(...allViewCounts);
+            const maxValue = Math.max(...allViewCounts);
+            const valueRange = maxValue - minValue;
+            
+            let suggestedMin = Math.max(0, minValue - valueRange * 0.1);
+            let suggestedMax = maxValue + valueRange * 0.1;
+            
+            // 創建新圖表
+            window.compareChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                font: {
+                                    size: 14
+                                },
+                                usePointStyle: true,
+                                pointStyle: 'circle'
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                title: function(context) {
+                                    const timestamp = context[0].parsed.x;
+                                    const date = new Date(timestamp);
+                                    return date.toLocaleString('zh-TW', {
+                                        year: 'numeric',
+                                        month: '2-digit',
+                                        day: '2-digit',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        hour12: false
+                                    });
+                                },
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += formatNumberWithCommas(context.parsed.y);
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'hour',
+                                displayFormats: {
+                                    hour: 'MM/dd HH:mm',
+                                    day: 'MM/dd'
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: '時間'
+                            },
+                            ticks: {
+                                maxTicksLimit: 8
+                            }
+                        },
+                        y: {
+                            type: 'linear',
+                            title: {
+                                display: true,
+                                text: '播放量'
+                            },
+                            suggestedMin: suggestedMin,
+                            suggestedMax: suggestedMax,
+                            ticks: {
+                                callback: function(value) {
+                                    return formatNumberWithCommas(value);
+                                }
+                            }
+                        }
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'nearest'
+                    }
+                }
+            });
+        }
+
+        // 獲取共同的時間點
+        function getCommonTimePoints(compareData) {
+            const allTimestamps = new Set();
+            
+            Object.values(compareData).forEach(videoData => {
+                if (videoData.data && videoData.data.length > 0) {
+                    videoData.data.forEach(item => {
+                        allTimestamps.add(item.timestamp);
+                    });
+                }
+            });
+            
+            // 轉換為數組並排序
+            const timestamps = Array.from(allTimestamps).sort((a, b) => a - b);
+            
+            // 如果時間點太多，進行抽樣
+            if (timestamps.length > 100) {
+                const step = Math.ceil(timestamps.length / 50);
+                const sampled = [];
+                for (let i = 0; i < timestamps.length; i += step) {
+                    sampled.push(timestamps[i]);
+                }
+                return sampled;
+            }
+            
+            return timestamps;
+        }
+
+        // 查找最接近的時間戳數據
+        function findClosestTimestamp(data, targetTimestamp) {
+            if (!data || data.length === 0) return null;
+            
+            let closest = data[0];
+            let minDiff = Math.abs(data[0].timestamp - targetTimestamp);
+            
+            for (let i = 1; i < data.length; i++) {
+                const diff = Math.abs(data[i].timestamp - targetTimestamp);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    closest = data[i];
+                }
+            }
+            
+            return closest;
+        }
+
+        // 更新比較表格
+        function updateCompareTable(compareData) {
+            const tableBody = document.querySelector('#compareTable tbody');
+            const tableHead = document.querySelector('#compareTable thead tr');
+            
+            // 清空表格
+            tableBody.innerHTML = '';
+            
+            // 更新表頭
+            tableHead.innerHTML = '<th>時間</th>';
+            Object.values(compareData).forEach(videoData => {
+                tableHead.innerHTML += `<th style="color: ${videoData.color}">${videoData.name}</th>`;
+            });
+            
+            // 獲取共同的時間點
+            const commonTimePoints = getCommonTimePoints(compareData);
+            
+            // 限制顯示的行數
+            const displayPoints = commonTimePoints.slice(-20); // 顯示最近的20個時間點
+            
+            // 填充表格數據
+            displayPoints.forEach(timestamp => {
+                const row = document.createElement('tr');
+                const date = new Date(timestamp);
+                const timeCell = document.createElement('td');
+                timeCell.textContent = date.toLocaleString('zh-TW', {
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                });
+                row.appendChild(timeCell);
+                
+                Object.values(compareData).forEach(videoData => {
+                    const dataCell = document.createElement('td');
+                    const closestData = findClosestTimestamp(videoData.data, timestamp);
+                    
+                    if (closestData) {
+                        dataCell.textContent = formatNumberWithCommas(closestData.viewCount);
+                        dataCell.style.color = videoData.color;
+                        dataCell.style.fontWeight = '600';
+                    } else {
+                        dataCell.textContent = '--';
+                        dataCell.style.color = '#999';
+                    }
+                    
+                    row.appendChild(dataCell);
+                });
+                
+                tableBody.appendChild(row);
+            });
+            
+            // 添加說明行
+            if (commonTimePoints.length > 20) {
+                const infoRow = document.createElement('tr');
+                const infoCell = document.createElement('td');
+                infoCell.colSpan = Object.values(compareData).length + 1;
+                infoCell.style.textAlign = 'center';
+                infoCell.style.fontStyle = 'italic';
+                infoCell.style.color = '#666';
+                infoCell.textContent = `... 僅顯示最近20個時間點，共 ${commonTimePoints.length} 個時間點`;
+                infoRow.appendChild(infoCell);
+                tableBody.appendChild(infoRow);
+            }
+        }
+
+        // ==================== 導出功能函數 ====================
+
+        // 導出當前影片數據
+        function exportCurrentVideoData() {
+            if (!chart || !chart.data || chart.data.datasets.length === 0) {
+                alert('沒有可導出的數據');
+                return;
+            }
+            
+            const videoName = document.getElementById('currentVideoName').textContent;
+            const videoId = currentVideoId;
+            
+            // 從圖表數據創建CSV
+            const chartData = chart.data.datasets[0].data;
+            const csvData = convertArrayToCSV(chartData, videoName, videoId);
+            
+            // 下載
+            const filename = `youtube-tracker-${videoId}-${new Date().toISOString().split('T')[0]}.csv`;
+            downloadCSV(csvData, filename);
+        }
+
+        // 導出比較數據
+        function exportComparisonData() {
+            if (comparedVideos.length === 0) {
+                alert('請先進行影片比較');
+                return;
+            }
+            
+            // 從比較圖表創建CSV
+            const chart = window.compareChart;
+            if (!chart || !chart.data) {
+                alert('沒有可導出的比較數據');
+                return;
+            }
+            
+            const csvData = createComparisonCSV(chart.data);
+            
+            // 下載
+            const filename = `youtube-comparison-${new Date().toISOString().split('T')[0]}.csv`;
+            downloadCSV(csvData, filename);
+        }
+
+        // 將數組轉換為CSV
+        function convertArrayToCSV(dataArray, videoName, videoId) {
+            const headers = ['時間', '播放量', '影片名稱', '影片ID'];
+            const rows = dataArray.map(point => {
+                const date = new Date(point.x);
+                const timestamp = date.toISOString();
+                const formattedDate = date.toLocaleString('zh-TW');
+                
+                return [
+                    `"${formattedDate}"`,
+                    point.y,
+                    `"${videoName}"`,
+                    `"${videoId}"`
+                ];
+            });
+            
+            return [headers, ...rows].map(row => row.join(',')).join('\n');
+        }
+
+        // 創建比較CSV
+        function createComparisonCSV(chartData) {
+            if (!chartData || !chartData.datasets || chartData.datasets.length === 0) {
+                return '';
+            }
+            
+            // 獲取所有時間點
+            const timePoints = new Set();
+            chartData.datasets.forEach(dataset => {
+                dataset.data.forEach(point => {
+                    timePoints.add(point.x);
+                });
+            });
+            
+            const sortedTimes = Array.from(timePoints).sort((a, b) => a - b);
+            
+            // 準備CSV數據
+            const headers = ['時間'];
+            chartData.datasets.forEach(dataset => {
+                headers.push(`"${dataset.label}"`);
+            });
+            
+            const rows = [];
+            sortedTimes.forEach(time => {
+                const date = new Date(time);
+                const formattedDate = date.toLocaleString('zh-TW');
+                
+                const row = [`"${formattedDate}"`];
+                
+                chartData.datasets.forEach(dataset => {
+                    const point = dataset.data.find(p => p.x === time);
+                    row.push(point ? point.y : '');
+                });
+                
+                rows.push(row);
+            });
+            
+            return [headers, ...rows].map(row => row.join(',')).join('\n');
+        }
+
+        // 查找最接近的時間戳
+        function findClosestTimestamp(data, targetTimestamp) {
+            if (!data || data.length === 0) return null;
+            
+            let closest = data[0];
+            let minDiff = Math.abs(data[0].timestamp - targetTimestamp);
+            
+            for (let i = 1; i < data.length; i++) {
+                const diff = Math.abs(data[i].timestamp - targetTimestamp);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    closest = data[i];
+                }
+            }
+            
+            return minDiff < 3600000 ? closest : null; // 1小時內有效
+        }
+
+        // 下載CSV文件
+        function downloadCSV(csvData, filename) {
+            const blob = new Blob(['\ufeff' + csvData], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.style.display = 'none';
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            setTimeout(() => {
+                URL.revokeObjectURL(url);
+            }, 100);
+        }
         
         // ==================== 【修改】初始化 ====================
         document.addEventListener('DOMContentLoaded', function() {

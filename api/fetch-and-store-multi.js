@@ -124,7 +124,7 @@ export default async function handler(req, res) {
         // 【重要】每次執行前都刷新影片配置
         console.log('🔄 刷新影片配置...');
         const config = await getUserVideoConfig();
-        TRACKED_VIDEOS = config.TACKED_VIDEOS;
+        TRACKED_VIDEOS = config.TRACKED_VIDEOS;
         ALL_VIDEO_IDS = config.ALL_VIDEO_IDS;
         console.log(`✅ 載入動態影片配置，追蹤影片數: ${ALL_VIDEO_IDS.length}`);
         
