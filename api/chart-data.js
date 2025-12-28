@@ -21,7 +21,7 @@ const config = {
 /**
  * 安全解析 JSON
  */
-function safeJsonParse(str, fallback = null) {
+function safeJsonParse(str, fallback) {
     if (!str || typeof str !== 'string') return fallback;
     try {
         return JSON.parse(str);
@@ -118,7 +118,7 @@ function calculateStatistics(allData, processedData) {
 
 // ==================== 主處理函式 ====================
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
     const requestId = `api_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const startTime = Date.now();
 
@@ -273,7 +273,7 @@ export default async function handler(req, res) {
             };
         }
 
-        // ==================== 生成響應 ====================
+        // ==================== 生成響應（統一格式）===================
         
         const processingTime = Date.now() - startTime;
         
@@ -319,8 +319,4 @@ export default async function handler(req, res) {
             timestamp: new Date().toISOString()
         });
     }
-}
-
-export const config = {
-    runtime: 'nodejs',
 };

@@ -42,14 +42,13 @@ const DEFAULT_ALL_VIDEO_IDS = Object.values(DEFAULT_TRACKED_VIDEOS).map(v => v.i
 
 // 配置檔案名稱
 const CONFIG_FILE_NAME = 'youtube-videos-config.json';
-const CONFIG_VERSION = '1.0';
 
 // ==================== 工具函式 ====================
 
 /**
  * 安全解析 JSON
  */
-function safeJsonParse(str, fallback = null) {
+function safeJsonParse(str, fallback) {
     if (!str || typeof str !== 'string') return fallback;
     try {
         return JSON.parse(str);
@@ -205,7 +204,9 @@ async function loadUserConfig() {
  * @param {boolean} forceRefresh - 強制刷新快取
  * @returns {Promise<Object>} 影片配置物件
  */
-async function getVideoConfig(forceRefresh = false) {
+async function getVideoConfig(forceRefresh) {
+    forceRefresh = forceRefresh === true;
+    
     const now = Date.now();
     const cacheExpired = !configCache.data || (now - configCache.timestamp > configCache.ttl);
 
@@ -302,7 +303,6 @@ async function saveVideoConfig(videos) {
 
         // 準備配置資料
         const videosArray = videos.map(video => ({
-            version: CONFIG_VERSION,
             id: trimString(video.id),
             name: trimString(video.name),
             description: trimString(video.description),
@@ -356,25 +356,6 @@ function clearConfigCache() {
     };
     console.log('🗑️ 配置快取已清除');
 }
-
-// ==================== 初始化 ====================
-
-// 啟動時載入配置
-let initializationPromise = null;
-
-async function initialize() {
-    if (!initializationPromise) {
-        initializationPromise = getVideoConfig();
-    }
-    return initializationPromise;
-}
-
-// 立即初始化（非阻塞）
-initialize().then(() => {
-    console.log('✅ 影片配置模組初始化完成');
-}).catch(error => {
-    console.error('❌ 影片配置初始化失敗:', error.message);
-});
 
 // ==================== 匯出 ====================
 

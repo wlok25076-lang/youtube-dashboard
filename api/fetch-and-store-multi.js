@@ -5,11 +5,9 @@
  * - 從 YouTube API 獲取多個影片的播放量統計
  * - 將數據儲存至 GitHub Gist
  * - 支援影片管理操作（新增、刪除、更新）
- * - 內建速率限制和錯誤重試機制
  */
 
 const https = require('https');
-const http = require('http');
 
 // ==================== 環境變數管理 ====================
 const config = {
@@ -22,7 +20,7 @@ const config = {
 
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3/videos';
 
-// ==================== 影片配置模組 ====================
+// 影片配置模組
 const videosConfig = require('./videos-config');
 
 // ==================== 工具函式 ====================
@@ -41,9 +39,9 @@ function secureCompare(a, b) {
 }
 
 /**
- * 安全解析 JSON，失敗時返回預設值
+ * 安全解析 JSON
  */
-function safeJsonParse(str, fallback = null) {
+function safeJsonParse(str, fallback) {
     if (!str || typeof str !== 'string') return fallback;
     try {
         return JSON.parse(str);
@@ -71,7 +69,7 @@ async function fetchWithRetry(url, options, maxRetries = 3) {
             // 5xx 伺服器錯誤可重試
             if (response.status >= 500) {
                 if (attempt < maxRetries) {
-                    const waitTime = 1000 * Math.pow(2, attempt); // 指數退避
+                    const waitTime = 1000 * Math.pow(2, attempt);
                     console.warn(`⚠️ 伺服器錯誤 ${response.status}，${waitTime}ms 後重試 (${attempt}/${maxRetries})`);
                     await delay(waitTime);
                     continue;
@@ -82,7 +80,7 @@ async function fetchWithRetry(url, options, maxRetries = 3) {
             return response;
         } catch (error) {
             if (error.status && error.status >= 400 && error.status < 500) {
-                throw error; // 客戶端錯誤不重試
+                throw error;
             }
             if (attempt === maxRetries) {
                 throw error;
@@ -111,7 +109,7 @@ function trimString(str) {
 
 // ==================== 佇列管理（速率限制）====================
 class RequestQueue {
-    constructor(maxConcurrent = 3, baseDelay = 800) {
+    constructor(maxConcurrent = 2, baseDelay = 1000) {
         this.maxConcurrent = maxConcurrent;
         this.baseDelay = baseDelay;
         this.queue = [];
@@ -273,7 +271,6 @@ async function handleVideoManagement(req, res) {
             case 'add': {
                 const { id, name, description, color } = body;
                 
-                // 驗證輸入
                 if (!id || !name) {
                     return res.status(400).json({
                         success: false,
@@ -461,11 +458,10 @@ async function handleVideoManagement(req, res) {
 
 // ==================== 主處理函式 ====================
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
     const startTime = Date.now();
     const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
-    // 添加請求追蹤資訊
     req.requestId = requestId;
 
     try {
@@ -658,7 +654,7 @@ export default async function handler(req, res) {
                 }
 
                 // API 請求間隔
-                await requestQueue.delay(800);
+                await requestQueue.delay(1000);
             });
         }
 
@@ -711,8 +707,4 @@ export default async function handler(req, res) {
             timestamp: new Date().toISOString()
         });
     }
-}
-
-export const config = {
-    runtime: 'nodejs',
 };
