@@ -1,637 +1,713 @@
-// api/fetch-and-store-multi.js
-global.URL = require('url').URL;
-global.URLSearchParams = require('url').URLSearchParams;
+/**
+ * YouTube 多影片追蹤資料收集程式
+ * 
+ * 功能：
+ * - 從 YouTube API 獲取多個影片的播放量統計
+ * - 將數據儲存至 GitHub Gist
+ * - 支援影片管理操作（新增、刪除、更新）
+ * - 內建速率限制和錯誤重試機制
+ */
+
+const https = require('https');
+const http = require('http');
+
+// ==================== 環境變數管理 ====================
+const config = {
+    youtubeApiKey: process.env.YOUTUBE_API_KEY?.trim() || null,
+    gistId: process.env.GIST_ID?.trim() || null,
+    githubToken: process.env.GITHUB_TOKEN?.trim() || null,
+    cronAuthToken: process.env.CRON_AUTH_TOKEN?.trim() || null,
+    nodeEnv: process.env.NODE_ENV || 'development'
+};
+
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3/videos';
-const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
-const GIST_ID = process.env.GIST_ID;
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-const CRON_AUTH_TOKEN = process.env.CRON_AUTH_TOKEN;
 
-// 【修改】導入影片配置函數
-const { 
-    getUserVideoConfig, 
-    saveUserVideoConfig,
-    getVideoById,
-    DEFAULT_TRACKED_VIDEOS,
-    DEFAULT_ALL_VIDEO_IDS 
-} = require('./videos-config');
+// ==================== 影片配置模組 ====================
+const videosConfig = require('./videos-config');
 
-// 【修改】影片配置 - 改為動態獲取
-let TRACKED_VIDEOS = DEFAULT_TRACKED_VIDEOS;
-let ALL_VIDEO_IDS = DEFAULT_ALL_VIDEO_IDS;
+// ==================== 工具函式 ====================
 
-export default async function handler(req, res) {
-    // ==================== 【重要修改】優先處理影片管理操作 ====================
-    const { action } = req.query;
+/**
+ * 常數時間字串比較（防止時序攻擊）
+ */
+function secureCompare(a, b) {
+    if (typeof a !== 'string' || typeof b !== 'string') return false;
+    if (a.length !== b.length) return false;
+    let result = 0;
+    for (let i = 0; i < a.length; i++) {
+        result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    }
+    return result === 0;
+}
+
+/**
+ * 安全解析 JSON，失敗時返回預設值
+ */
+function safeJsonParse(str, fallback = null) {
+    if (!str || typeof str !== 'string') return fallback;
+    try {
+        return JSON.parse(str);
+    } catch {
+        return fallback;
+    }
+}
+
+/**
+ * HTTP 請求封裝（支援重試機制）
+ */
+async function fetchWithRetry(url, options, maxRetries = 3) {
+    const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
     
-    // 如果是影片管理操作（add/delete/update/get），直接處理
-    if (action === 'get' || action === 'add' || action === 'delete' || action === 'update') {
-        console.log(`🎬 處理影片管理操作: ${action}`);
-        return await handleVideoManagement(req, res);
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const response = await fetch(url, options);
+            
+            // 4xx 客戶端錯誤不重試
+            if (response.status >= 400 && response.status < 500) {
+                const errorText = await response.text().catch(() => '');
+                throw { status: response.status, message: errorText || `HTTP ${response.status}` };
+            }
+            
+            // 5xx 伺服器錯誤可重試
+            if (response.status >= 500) {
+                if (attempt < maxRetries) {
+                    const waitTime = 1000 * Math.pow(2, attempt); // 指數退避
+                    console.warn(`⚠️ 伺服器錯誤 ${response.status}，${waitTime}ms 後重試 (${attempt}/${maxRetries})`);
+                    await delay(waitTime);
+                    continue;
+                }
+                throw { status: response.status, message: `伺服器錯誤: ${response.status}` };
+            }
+            
+            return response;
+        } catch (error) {
+            if (error.status && error.status >= 400 && error.status < 500) {
+                throw error; // 客戶端錯誤不重試
+            }
+            if (attempt === maxRetries) {
+                throw error;
+            }
+            const waitTime = 1000 * Math.pow(2, attempt);
+            console.warn(`⚠️ 請求失敗，${waitTime}ms 後重試 (${attempt}/${maxRetries}): ${error.message}`);
+            await delay(waitTime);
+        }
+    }
+    throw new Error('重試次數耗盡');
+}
+
+/**
+ * 驗證 YouTube 影片 ID 格式
+ */
+function validateVideoId(id) {
+    return /^[a-zA-Z0-9_-]{11}$/.test(id);
+}
+
+/**
+ * 去除字串前後空白
+ */
+function trimString(str) {
+    return typeof str === 'string' ? str.trim() : str;
+}
+
+// ==================== 佇列管理（速率限制）====================
+class RequestQueue {
+    constructor(maxConcurrent = 3, baseDelay = 800) {
+        this.maxConcurrent = maxConcurrent;
+        this.baseDelay = baseDelay;
+        this.queue = [];
+        this.active = 0;
     }
 
-    // ==================== 除錯模式 ====================
-    if (req.query.debug === '1') {
-        const authHeader = req.headers.authorization;
-        const tokenFromQuery = req.query.token || req.query.auth;
-        
-        return res.status(200).json({
-            debug: true,
-            timestamp: new Date().toISOString(),
-            environment: {
-                YOUTUBE_API_KEY: YOUTUBE_API_KEY ? `已設定` : '未設定',
-                GIST_ID: GIST_ID ? `已設定` : '未設定',
-                GITHUB_TOKEN: GITHUB_TOKEN ? `已設定` : '未設定',
-                CRON_AUTH_TOKEN: CRON_AUTH_TOKEN ? `已設定 (${CRON_AUTH_TOKEN.length} chars)` : '未設定',
-                NODE_ENV: process.env.NODE_ENV,
-                TRACKING_VIDEOS: ALL_VIDEO_IDS.length,
-                VIDEOS_LIST: ALL_VIDEO_IDS,
-                AUTH_RECEIVED: {
-                    header: authHeader || '(空)',
-                    query_token: tokenFromQuery || '(空)',
-                    expected_header: `Bearer ${CRON_AUTH_TOKEN ? '***' + CRON_AUTH_TOKEN.substring(CRON_AUTH_TOKEN.length - 4) : '(無令牌)'}`
+    async enqueue(fn) {
+        return new Promise((resolve, reject) => {
+            const execute = async () => {
+                this.active++;
+                try {
+                    const result = await fn();
+                    resolve(result);
+                } catch (error) {
+                    reject(error);
+                } finally {
+                    this.active--;
+                    this.processQueue();
                 }
-            }
+            };
+            this.queue.push(execute);
+            this.processQueue();
         });
     }
 
-    // ==================== 正式邏輯（數據收集任務） ====================
-    // 1. 檢查請求方法
-    if (req.method !== 'GET') {
-        return res.status(405).json({ error: 'Method not allowed' });
-    }
-
-    // 2. 生產環境認證檢查（兼容 cron-job.org）
-    if (process.env.NODE_ENV === 'production') {
-        const authHeader = req.headers.authorization;
-        const expectedHeader = `Bearer ${CRON_AUTH_TOKEN}`;
-        const tokenFromQuery = req.query.token || req.query.auth;
-        
-        // 【重要】允許兩種認證方式，兼容 cron-job.org：
-        // 1. Authorization: Bearer <token> （標準方式）
-        // 2. URL 查詢參數: ?token=<token> 或 ?auth=<token> （cron-job.org 可能用這個）
-        const isValidAuth = (
-            (authHeader && authHeader === expectedHeader) ||
-            (tokenFromQuery && tokenFromQuery === CRON_AUTH_TOKEN)
-        );
-        
-        if (!isValidAuth) {
-            console.error('🚨 未授權的定時任務請求', {
-                receivedAuthHeader: authHeader || '(空)',
-                receivedQueryToken: tokenFromQuery ? '***' + tokenFromQuery.substring(tokenFromQuery.length - 4) : '(空)',
-                expectedTokenPreview: CRON_AUTH_TOKEN ? '***' + CRON_AUTH_TOKEN.substring(CRON_AUTH_TOKEN.length - 4) : '(無令牌)',
-                clientIP: req.headers['x-forwarded-for'],
-                time: new Date().toISOString(),
-                url: req.url
-            });
-            return res.status(401).json({ 
-                success: false,
-                error: 'Unauthorized',
-                message: '無效或缺失的授權令牌',
-                hint: '請使用: 1. Authorization: Bearer <token> 或 2. URL參數 ?token=<token>',
-                received: {
-                    hasAuthHeader: !!authHeader,
-                    hasQueryToken: !!tokenFromQuery,
-                    headerLength: authHeader ? authHeader.length : 0,
-                    queryTokenLength: tokenFromQuery ? tokenFromQuery.length : 0
-                }
-            });
+    processQueue() {
+        while (this.queue.length > 0 && this.active < this.maxConcurrent) {
+            const execute = this.queue.shift();
+            execute();
         }
     }
 
-    // 3. 檢查必要環境變數
-    if (!YOUTUBE_API_KEY || !GIST_ID || !GITHUB_TOKEN) {
-        console.error('缺少必要的環境變數:', {
-            hasYoutubeKey: !!YOUTUBE_API_KEY,
-            hasGistId: !!GIST_ID,
-            hasGithubToken: !!GITHUB_TOKEN,
-            hasCronToken: !!CRON_AUTH_TOKEN
-        });
-        return res.status(500).json({ 
+    async delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+}
+
+const requestQueue = new RequestQueue(2, 1000);
+
+// ==================== Gist 操作 ====================
+
+/**
+ * 讀取 Gist 數據
+ */
+async function fetchGist(gistId, githubToken) {
+    const url = `https://api.github.com/gists/${gistId}`;
+    const response = await fetchWithRetry(url, {
+        headers: {
+            'Authorization': `token ${githubToken}`,
+            'User-Agent': 'YouTube-Multi-Tracker/2.0',
+            'Accept': 'application/vnd.github.v3+json'
+        }
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`無法讀取 Gist: ${response.status} - ${errorText.substring(0, 200)}`);
+    }
+
+    return response.json();
+}
+
+/**
+ * 更新 Gist 檔案
+ */
+async function updateGist(gistId, githubToken, files, description) {
+    const url = `https://api.github.com/gists/${gistId}`;
+    
+    const response = await fetchWithRetry(url, {
+        method: 'PATCH',
+        headers: {
+            'Authorization': `token ${githubToken}`,
+            'Content-Type': 'application/json',
+            'User-Agent': 'YouTube-Multi-Tracker/2.0',
+            'Accept': 'application/vnd.github.v3+json'
+        },
+        body: JSON.stringify({
+            description: description,
+            files: files
+        })
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`Gist 更新失敗: ${response.status} - ${errorText.substring(0, 200)}`);
+    }
+
+    return response.json();
+}
+
+// ==================== YouTube API 操作 ====================
+
+/**
+ * 獲取 YouTube 影片統計
+ */
+async function fetchVideoStats(videoId, apiKey) {
+    const url = `${YOUTUBE_API_BASE}?id=${videoId}&part=statistics&key=${apiKey}`;
+    
+    const response = await fetchWithRetry(url, {
+        headers: {
+            'User-Agent': 'YouTube-Multi-Tracker/2.0'
+        }
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`YouTube API 錯誤: ${response.status} - ${errorText.substring(0, 200)}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.items || data.items.length === 0) {
+        throw new Error('影片未找到或無法存取');
+    }
+
+    return {
+        viewCount: parseInt(data.items[0].statistics.viewCount, 10)
+    };
+}
+
+// ==================== 影片管理操作 ====================
+
+/**
+ * 處理影片管理請求
+ */
+async function handleVideoManagement(req, res) {
+    const { action } = req.query;
+    const body = safeJsonParse(req.body, {});
+
+    // 驗證必要環境變數
+    if (!config.gistId || !config.githubToken) {
+        return res.status(500).json({
             success: false,
             error: '伺服器配置錯誤',
-            message: '缺少必要的環境變數',
+            code: 'MISSING_CONFIG',
             details: {
-                YOUTUBE_API_KEY: YOUTUBE_API_KEY ? '已設定' : '未設定',
-                GIST_ID: GIST_ID ? '已設定' : '未設定',
-                GITHUB_TOKEN: GITHUB_TOKEN ? '已設定' : '未設定',
-                CRON_AUTH_TOKEN: CRON_AUTH_TOKEN ? '已設定' : '未設定'
+                gistId: !!config.gistId,
+                githubToken: !!config.githubToken
             }
         });
     }
 
     try {
-        // 【重要】每次執行前都刷新影片配置
-        console.log('🔄 刷新影片配置...');
-        const config = await getUserVideoConfig();
-        TRACKED_VIDEOS = config.TRACKED_VIDEOS;
-        ALL_VIDEO_IDS = config.ALL_VIDEO_IDS;
-        console.log(`✅ 載入動態影片配置，追蹤影片數: ${ALL_VIDEO_IDS.length}`);
-        
-        const results = [];
-        
-        // 【重要】讀取現有的 Gist 以保留所有檔案
-        console.log('📚 讀取現有 Gist 數據...');
-        const gistResponse = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-            headers: {
-                'Authorization': `token ${GITHUB_TOKEN}`,
-                'User-Agent': 'Vercel-YouTube-Multi-Tracker'
+        switch (action) {
+            case 'get': {
+                const configData = await videosConfig.getVideoConfig();
+                const videos = Object.values(configData.TRACKED_VIDEOS);
+                
+                return res.status(200).json({
+                    success: true,
+                    data: videos,
+                    meta: {
+                        total: videos.length,
+                        timestamp: new Date().toISOString()
+                    }
+                });
             }
-        });
-        
-        if (!gistResponse.ok) {
-            throw new Error(`無法讀取 Gist: ${gistResponse.status} - ${await gistResponse.text()}`);
+
+            case 'add': {
+                const { id, name, description, color } = body;
+                
+                // 驗證輸入
+                if (!id || !name) {
+                    return res.status(400).json({
+                        success: false,
+                        error: '缺少必要參數',
+                        code: 'MISSING_PARAMS',
+                        details: { id: !!id, name: !!name }
+                    });
+                }
+
+                if (!validateVideoId(id)) {
+                    return res.status(400).json({
+                        success: false,
+                        error: '無效的 YouTube 影片 ID 格式',
+                        code: 'INVALID_VIDEO_ID',
+                        details: { id, example: 'dQw4w9WgXcQ' }
+                    });
+                }
+
+                const currentConfig = await videosConfig.getVideoConfig();
+                const videoList = Object.values(currentConfig.TRACKED_VIDEOS);
+
+                if (videoList.some(v => v.id === id)) {
+                    return res.status(400).json({
+                        success: false,
+                        error: '影片 ID 已存在',
+                        code: 'DUPLICATE_VIDEO_ID',
+                        details: { id }
+                    });
+                }
+
+                const newVideo = {
+                    id: trimString(id),
+                    name: trimString(name),
+                    description: trimString(description) || `${name} - YouTube 影片播放量追蹤`,
+                    color: trimString(color) || '#0070f3',
+                    startDate: new Date().toISOString().split('T')[0]
+                };
+
+                const saveResult = await videosConfig.saveVideoConfig([...videoList, newVideo]);
+
+                if (!saveResult) {
+                    return res.status(500).json({
+                        success: false,
+                        error: '儲存配置失敗',
+                        code: 'SAVE_FAILED'
+                    });
+                }
+
+                return res.status(200).json({
+                    success: true,
+                    message: '影片添加成功',
+                    data: newVideo,
+                    meta: { total: videoList.length + 1 }
+                });
+            }
+
+            case 'delete': {
+                const { id } = body;
+
+                if (!id) {
+                    return res.status(400).json({
+                        success: false,
+                        error: '缺少影片 ID',
+                        code: 'MISSING_VIDEO_ID'
+                    });
+                }
+
+                const currentConfig = await videosConfig.getVideoConfig();
+                let videoList = Object.values(currentConfig.TRACKED_VIDEOS);
+
+                if (videoList.length <= 1) {
+                    return res.status(400).json({
+                        success: false,
+                        error: '至少需要保留一個追蹤影片',
+                        code: 'CANNOT_DELETE_LAST'
+                    });
+                }
+
+                const index = videoList.findIndex(v => v.id === id);
+                if (index === -1) {
+                    return res.status(404).json({
+                        success: false,
+                        error: '影片未找到',
+                        code: 'VIDEO_NOT_FOUND',
+                        details: { availableIds: videoList.map(v => v.id) }
+                    });
+                }
+
+                const deletedVideo = videoList[index];
+                const updatedList = videoList.filter((_, i) => i !== index);
+
+                const saveResult = await videosConfig.saveVideoConfig(updatedList);
+
+                if (!saveResult) {
+                    return res.status(500).json({
+                        success: false,
+                        error: '刪除配置失敗',
+                        code: 'DELETE_FAILED'
+                    });
+                }
+
+                return res.status(200).json({
+                    success: true,
+                    message: '影片刪除成功',
+                    data: deletedVideo,
+                    meta: { remaining: updatedList.length }
+                });
+            }
+
+            case 'update': {
+                const { id, name, description, color } = body;
+
+                if (!id) {
+                    return res.status(400).json({
+                        success: false,
+                        error: '缺少影片 ID',
+                        code: 'MISSING_VIDEO_ID'
+                    });
+                }
+
+                const currentConfig = await videosConfig.getVideoConfig();
+                let videoList = Object.values(currentConfig.TRACKED_VIDEOS);
+
+                const index = videoList.findIndex(v => v.id === id);
+                if (index === -1) {
+                    return res.status(404).json({
+                        success: false,
+                        error: '影片未找到',
+                        code: 'VIDEO_NOT_FOUND'
+                    });
+                }
+
+                const original = videoList[index];
+                const updated = {
+                    ...original,
+                    name: name ? trimString(name) : original.name,
+                    description: description !== undefined ? trimString(description) : original.description,
+                    color: color ? trimString(color) : original.color
+                };
+
+                videoList[index] = updated;
+
+                const saveResult = await videosConfig.saveVideoConfig(videoList);
+
+                if (!saveResult) {
+                    return res.status(500).json({
+                        success: false,
+                        error: '更新配置失敗',
+                        code: 'UPDATE_FAILED'
+                    });
+                }
+
+                return res.status(200).json({
+                    success: true,
+                    message: '影片更新成功',
+                    data: {
+                        before: original,
+                        after: updated
+                    }
+                });
+            }
+
+            default:
+                return res.status(400).json({
+                    success: false,
+                    error: '未知的操作類型',
+                    code: 'UNKNOWN_ACTION',
+                    details: {
+                        allowedActions: ['get', 'add', 'delete', 'update'],
+                        received: action
+                    }
+                });
         }
-        
-        const existingGist = await gistResponse.json();
+    } catch (error) {
+        console.error('影片管理操作失敗:', error);
+        return res.status(500).json({
+            success: false,
+            error: '內部伺服器錯誤',
+            code: 'INTERNAL_ERROR',
+            message: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+}
+
+// ==================== 主處理函式 ====================
+
+export default async function handler(req, res) {
+    const startTime = Date.now();
+    const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // 添加請求追蹤資訊
+    req.requestId = requestId;
+
+    try {
+        // 優先處理影片管理操作
+        const { action } = req.query;
+        if (action === 'get' || action === 'add' || action === 'delete' || action === 'update') {
+            console.log(`[${requestId}] 🎬 處理影片管理操作: ${action}`);
+            return await handleVideoManagement(req, res);
+        }
+
+        // 驗證必要環境變數
+        if (!config.youtubeApiKey || !config.gistId || !config.githubToken) {
+            const missing = [];
+            if (!config.youtubeApiKey) missing.push('YOUTUBE_API_KEY');
+            if (!config.gistId) missing.push('GIST_ID');
+            if (!config.githubToken) missing.push('GITHUB_TOKEN');
+            
+            console.error(`[${requestId}] 缺少必要環境變數: ${missing.join(', ')}`);
+            
+            return res.status(500).json({
+                success: false,
+                error: '伺服器配置錯誤',
+                code: 'MISSING_ENV_VARS',
+                details: {
+                    missingVars: missing,
+                    configuredVars: ['CRON_AUTH_TOKEN']
+                }
+            });
+        }
+
+        // 除錯模式
+        if (req.query.debug === '1') {
+            const authHeader = req.headers.authorization;
+            const tokenFromQuery = req.query.token || req.query.auth;
+
+            return res.status(200).json({
+                success: true,
+                debug: true,
+                environment: {
+                    nodeEnv: config.nodeEnv,
+                    youtubeApiKey: config.youtubeApiKey ? '已設定' : '未設定',
+                    gistId: config.gistId ? '已設定' : '未設定',
+                    githubToken: config.githubToken ? '已設定' : '未設定',
+                    cronAuthToken: config.cronAuthToken ? '已設定' : '未設定'
+                },
+                auth: {
+                    received: {
+                        header: authHeader || '(空)',
+                        queryToken: tokenFromQuery ? '***' + tokenFromQuery.slice(-4) : '(空)'
+                    }
+                },
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        // 驗證請求方法
+        if (req.method !== 'GET' && req.method !== 'POST') {
+            return res.status(405).json({
+                success: false,
+                error: 'Method not allowed',
+                code: 'INVALID_METHOD'
+            });
+        }
+
+        // 生產環境認證檢查
+        if (config.nodeEnv === 'production') {
+            const authHeader = req.headers.authorization;
+            const tokenFromQuery = req.query.token || req.query.auth;
+            
+            const headerValid = authHeader && secureCompare(authHeader, `Bearer ${config.cronAuthToken}`);
+            const queryValid = tokenFromQuery && secureCompare(tokenFromQuery, config.cronAuthToken);
+            
+            if (!headerValid && !queryValid) {
+                console.error(`[${requestId}] 未授權的請求`);
+                
+                return res.status(401).json({
+                    success: false,
+                    error: '未授權',
+                    code: 'UNAUTHORIZED',
+                    hint: '請使用 Authorization header 或 URL 參數傳遞認證令牌'
+                });
+            }
+        }
+
+        // 獲取最新影片配置
+        const videoConfig = await videosConfig.getVideoConfig();
+        const TRACKED_VIDEOS = videoConfig.TRACKED_VIDEOS;
+        const ALL_VIDEO_IDS = videoConfig.ALL_VIDEO_IDS;
+
+        console.log(`[${requestId}] 載入配置，追蹤 ${ALL_VIDEO_IDS.length} 個影片`);
+
+        // 讀取現有 Gist
+        const gistData = await fetchGist(config.gistId, config.githubToken);
         const filesToUpdate = {};
         
-        // 先複製現有檔案（保持其他檔案不變）
-        if (existingGist.files) {
-            Object.assign(filesToUpdate, existingGist.files);
-            console.log(`📁 找到 ${Object.keys(existingGist.files).length} 個現有檔案`);
+        if (gistData.files) {
+            Object.assign(filesToUpdate, gistData.files);
         }
-        
-        // 4. 處理所有影片
-        console.log(`🚀 開始處理 ${ALL_VIDEO_IDS.length} 個影片...`);
-        
+
+        const results = [];
+
+        // 處理每個影片
         for (const videoId of ALL_VIDEO_IDS) {
-            try {
-                const videoInfo = Object.values(TRACKED_VIDEOS).find(v => v.id === videoId);
-                console.log(`\n📹 處理影片: ${videoInfo?.name || videoId} (${videoId})`);
-                
-                // 4.1 呼叫 YouTube API
-                const youtubeUrl = `${YOUTUBE_API_BASE}?id=${videoId}&part=statistics&key=${YOUTUBE_API_KEY}`;
-                console.log(`   🔍 呼叫 YouTube API...`);
-                
-                const youtubeResponse = await fetch(youtubeUrl);
-                
-                if (!youtubeResponse.ok) {
-                    const errorText = await youtubeResponse.text();
-                    console.error(`   ❌ YouTube API 錯誤 (${videoId}):`, youtubeResponse.status, errorText.substring(0, 200));
-                    results.push({ 
-                        videoId, 
-                        success: false, 
-                        error: `YouTube API 錯誤: ${youtubeResponse.status}`,
-                        details: errorText.substring(0, 200)
-                    });
-                    continue;
-                }
-                
-                const youtubeData = await youtubeResponse.json();
-                
-                if (!youtubeData.items || youtubeData.items.length === 0) {
-                    console.error(`   ❌ 影片未找到: ${videoId}`);
-                    results.push({ 
-                        videoId, 
-                        success: false, 
-                        error: '影片未找到或無法存取',
-                        youtubeData: youtubeData
-                    });
-                    continue;
-                }
-                
-                const viewCount = parseInt(youtubeData.items[0].statistics.viewCount, 10);
-                const timestamp = Date.now();
-                const currentDate = new Date(timestamp).toISOString().split('T')[0];
-                const currentHour = new Date(timestamp).getHours();
-                
-                console.log(`   ✅ 獲取成功: ${viewCount.toLocaleString()} 次觀看 (${currentDate} ${currentHour}:00)`);
-                
-                // 4.2 讀取該影片的現有數據
-                const fileName = `youtube-data-${videoId}.json`;
-                let currentData = [];
-                
-                if (existingGist.files && existingGist.files[fileName] && existingGist.files[fileName].content) {
-                    try {
-                        currentData = JSON.parse(existingGist.files[fileName].content);
-                        if (!Array.isArray(currentData)) {
-                            console.warn(`   ⚠️ Gist 內容不是陣列，重置為空陣列`);
+            await requestQueue.enqueue(async () => {
+                try {
+                    const videoInfo = Object.values(TRACKED_VIDEOS).find(v => v.id === videoId);
+                    console.log(`[${requestId}] 📹 處理影片: ${videoInfo?.name || videoId} (${videoId})`);
+
+                    // 獲取 YouTube 統計
+                    const stats = await fetchVideoStats(videoId, config.youtubeApiKey);
+                    const timestamp = Date.now();
+                    const currentDate = new Date(timestamp).toISOString().split('T')[0];
+                    const currentHour = new Date(timestamp).getHours();
+
+                    console.log(`[${requestId}] ✅ ${videoInfo?.name || videoId}: ${stats.viewCount.toLocaleString()} 次觀看`);
+
+                    // 讀取現有數據
+                    const fileName = `youtube-data-${videoId}.json`;
+                    let currentData = [];
+
+                    if (filesToUpdate[fileName]?.content) {
+                        try {
+                            currentData = safeJsonParse(filesToUpdate[fileName].content, []);
+                            if (!Array.isArray(currentData)) {
+                                console.warn(`[${requestId}] ⚠️ ${fileName} 內容不是陣列`);
+                                currentData = [];
+                            }
+                        } catch {
                             currentData = [];
-                        } else {
-                            console.log(`   📂 讀取現有數據: ${currentData.length} 條記錄`);
                         }
-                    } catch (parseError) {
-                        console.warn(`   ⚠️ 解析 ${fileName} 失敗:`, parseError.message);
-                        currentData = [];
                     }
-                } else {
-                    console.log(`   📭 沒有找到現有數據，創建新檔案`);
-                }
-                
-                // 4.3 【特別處理】如果是主影片且沒有新格式檔案，嘗試從舊格式遷移
-                if (videoId === 'm2ANkjMRuXc' && currentData.length === 0 && 
-                    existingGist.files && existingGist.files['youtube-data.json']) {
-                    console.log(`   🔄 遷移舊數據到新格式: ${videoId}`);
-                    try {
-                        const oldData = JSON.parse(existingGist.files['youtube-data.json'].content);
+
+                    // 舊格式遷移
+                    if (videoId === 'm2ANkjMRuXc' && currentData.length === 0 && filesToUpdate['youtube-data.json']?.content) {
+                        console.log(`[${requestId}] 🔄 遷移舊數據格式`);
+                        const oldData = safeJsonParse(filesToUpdate['youtube-data.json'].content, []);
                         if (Array.isArray(oldData)) {
-                            // 添加 videoId 和 videoName 字段
                             currentData = oldData.map(item => ({
                                 timestamp: item.timestamp,
                                 viewCount: item.viewCount,
                                 date: item.date || new Date(item.timestamp).toISOString().split('T')[0],
                                 hour: item.hour || new Date(item.timestamp).getHours(),
-                                videoId: videoId,
+                                videoId,
                                 videoName: videoInfo?.name || videoId
                             }));
-                            console.log(`   ✅ 遷移 ${currentData.length} 條舊數據到 ${fileName}`);
                         }
-                    } catch (e) {
-                        console.error('   遷移失敗:', e.message);
                     }
+
+                    // 添加新記錄
+                    const newEntry = {
+                        timestamp,
+                        viewCount: stats.viewCount,
+                        date: currentDate,
+                        hour: currentHour,
+                        videoId,
+                        videoName: videoInfo?.name || videoId
+                    };
+
+                    currentData.push(newEntry);
+
+                    // 清理 30 天前的舊數據
+                    const thirtyDaysAgo = timestamp - 30 * 24 * 60 * 60 * 1000;
+                    currentData = currentData.filter(item => item.timestamp > thirtyDaysAgo);
+
+                    // 按時間排序
+                    currentData.sort((a, b) => a.timestamp - b.timestamp);
+
+                    // 準備更新
+                    filesToUpdate[fileName] = {
+                        content: JSON.stringify(currentData, null, 2)
+                    };
+
+                    results.push({
+                        videoId,
+                        success: true,
+                        viewCount: stats.viewCount,
+                        totalEntries: currentData.length,
+                        videoName: videoInfo?.name || videoId,
+                        timestamp: new Date(timestamp).toISOString()
+                    });
+
+                } catch (error) {
+                    console.error(`[${requestId}] ❌ 處理影片 ${videoId} 失敗:`, error.message);
+                    results.push({
+                        videoId,
+                        success: false,
+                        error: error.message,
+                        code: error.code || 'UNKNOWN_ERROR'
+                    });
                 }
-                
-                // 4.4 添加新記錄
-                const newEntry = { 
-                    timestamp, 
-                    viewCount, 
-                    date: currentDate,
-                    hour: currentHour,
-                    videoId,
-                    videoName: videoInfo?.name || videoId
-                };
-                
-                currentData.push(newEntry);
-                console.log(`   📝 添加新記錄: ${currentDate} ${currentHour}:00 - ${viewCount.toLocaleString()} 次觀看`);
-                
-                // 4.5 清理舊數據（保留最近30天）
-                const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-                const freshData = currentData.filter(item => item.timestamp > thirtyDaysAgo);
-                if (freshData.length < currentData.length) {
-                    console.log(`   🧹 清理了 ${currentData.length - freshData.length} 條過期記錄（30天前）`);
-                    currentData = freshData;
-                }
-                
-                // 確保按時間排序
-                currentData.sort((a, b) => a.timestamp - b.timestamp);
-                
-                // 4.6 準備更新Gist檔案
-                filesToUpdate[fileName] = {
-                    content: JSON.stringify(currentData, null, 2)
-                };
-                
-                results.push({
-                    videoId,
-                    success: true,
-                    viewCount,
-                    viewCountFormatted: viewCount.toLocaleString(),
-                    totalEntries: currentData.length,
-                    videoName: videoInfo?.name || videoId,
-                    timestamp: new Date(timestamp).toISOString()
-                });
-                
-                console.log(`   ✅ ${videoInfo?.name || videoId}: 總計 ${currentData.length} 條記錄`);
-                
-            } catch (error) {
-                console.error(`   ❌ 處理影片 ${videoId} 失敗:`, error.message);
-                results.push({
-                    videoId,
-                    success: false,
-                    error: error.message,
-                    stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-                });
-            }
-            
-            // 避免太快觸發YouTube API限制
-            await new Promise(resolve => setTimeout(resolve, 800));
+
+                // API 請求間隔
+                await requestQueue.delay(800);
+            });
         }
+
+        // 更新 Gist
+        console.log(`[${requestId}] 📤 更新 Gist (${Object.keys(filesToUpdate).length} 個檔案)`);
         
-        // 5. 批量更新所有檔案到Gist
-        console.log(`\n📤 更新 Gist (${Object.keys(filesToUpdate).length} 個檔案)...`);
-        const updateResponse = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-            method: 'PATCH',
-            headers: {
-                'Authorization': `token ${GITHUB_TOKEN}`,
-                'Content-Type': 'application/json',
-                'User-Agent': 'Vercel-YouTube-Multi-Tracker'
-            },
-            body: JSON.stringify({
-                description: `YouTube 多影片追蹤數據 (${ALL_VIDEO_IDS.length} 個影片)，最後更新: ${new Date().toISOString()}`,
-                files: filesToUpdate
-            })
-        });
-        
-        if (!updateResponse.ok) {
-            const errorText = await updateResponse.text();
-            throw new Error(`Gist 更新失敗: ${updateResponse.status} - ${errorText.substring(0, 200)}`);
-        }
-        
-        console.log(`✅ Gist 更新成功`);
-        
-        // 6. 成功回應
+        await updateGist(
+            config.gistId,
+            config.githubToken,
+            filesToUpdate,
+            `YouTube 多影片追蹤數據 (${ALL_VIDEO_IDS.length} 個影片)，更新: ${new Date().toISOString()}`
+        );
+
+        // 生成回應
         const successful = results.filter(r => r.success).length;
         const totalViews = results.filter(r => r.success).reduce((sum, r) => sum + r.viewCount, 0);
-        
-        res.status(200).json({ 
+        const processingTime = Date.now() - startTime;
+
+        const response = {
             success: true,
             message: `已處理 ${successful}/${ALL_VIDEO_IDS.length} 個影片`,
+            meta: {
+                processingTime: `${processingTime}ms`,
+                requestId,
+                timestamp: new Date().toISOString()
+            },
             summary: {
                 totalVideos: ALL_VIDEO_IDS.length,
-                successful: successful,
+                successful,
                 failed: ALL_VIDEO_IDS.length - successful,
-                totalViews: totalViews,
+                totalViews,
                 totalViewsFormatted: totalViews.toLocaleString()
             },
-            results,
-            timestamp: new Date().toISOString(),
-            nextSuggestion: successful > 0 ? '🎉 數據更新完成！' : '⚠️ 部分影片更新失敗，請檢查日誌'
-        });
-        
+            data: results
+        };
+
+        console.log(`[${requestId}] ✅ 完成，處理時間: ${processingTime}ms`);
+
+        return res.status(200).json(response);
+
     } catch (error) {
-        console.error('❌ 多影片更新失敗:', error);
-        res.status(500).json({ 
-            success: false,
-            error: '內部伺服器錯誤',
-            message: error.message,
-            timestamp: new Date().toISOString(),
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-        });
-    }
-}
-
-// ==================== 【修改】影片管理API處理函數 ====================
-async function handleVideoManagement(req, res) {
-    console.log(`🔄 處理影片管理: ${req.query.action}`);
-    
-    // 檢查請求方法
-    if (req.method !== 'GET' && req.method !== 'POST') {
-        return res.status(405).json({ 
-            success: false, 
-            error: 'Method not allowed. Use GET for getting videos, POST for adding/updating/deleting.' 
-        });
-    }
-
-    // 檢查必要的API密鑰
-    if (!GIST_ID || !GITHUB_TOKEN) {
-        return res.status(500).json({
-            success: false,
-            error: '伺服器配置錯誤，缺少Gist設定',
-            details: {
-                GIST_ID: GIST_ID ? '已設定' : '未設定',
-                GITHUB_TOKEN: GITHUB_TOKEN ? '已設定' : '未設定'
-            }
-        });
-    }
-
-    const { action } = req.query;
-    let body = req.body || {};
-
-    try {
-        // 如果是POST請求且body是字符串，解析為JSON
-        if (req.method === 'POST' && typeof body === 'string') {
-            body = JSON.parse(body);
-        }
-    } catch (e) {
-        console.error('解析請求體失敗:', e);
-        return res.status(400).json({ 
-            success: false, 
-            error: 'Invalid JSON body',
-            receivedBody: typeof req.body === 'string' ? req.body.substring(0, 200) : 'Not a string'
-        });
-    }
-
-    try {
-        console.log(`執行影片管理操作: ${action}`, body);
+        console.error(`[${requestId}] ❌ 處理失敗:`, error);
         
-        switch (action) {
-            case 'get': {
-                // 獲取當前影片列表
-                console.log('📋 獲取影片列表...');
-                const config = await getUserVideoConfig();
-                const videos = Object.values(config.TRACKED_VIDEOS);
-                
-                console.log(`✅ 返回 ${videos.length} 個影片`);
-                return res.status(200).json({
-                    success: true,
-                    videos: videos,
-                    total: videos.length,
-                    timestamp: new Date().toISOString()
-                });
-            }
-                
-            case 'add': {
-                // 添加新影片
-                console.log('➕ 添加新影片...', body);
-                const { id, name, description, color } = body;
-                
-                if (!id || !name) {
-                    console.error('❌ 缺少必要參數:', { id, name });
-                    return res.status(400).json({
-                        success: false,
-                        error: '影片ID和名稱是必需的',
-                        received: { id, name }
-                    });
-                }
-                
-                // 驗證YouTube影片ID格式
-                if (!/^[a-zA-Z0-9_-]{11}$/.test(id)) {
-                    console.error('❌ 無效的YouTube影片ID格式:', id);
-                    return res.status(400).json({
-                        success: false,
-                        error: '無效的YouTube影片ID格式。應為11位字符',
-                        example: 'dQw4w9WgXcQ',
-                        received: id
-                    });
-                }
-                
-                // 獲取當前配置
-                console.log('📥 獲取當前配置...');
-                const config = await getUserVideoConfig();
-                let videoList = Object.values(config.TRACKED_VIDEOS);
-                
-                console.log(`📊 當前有 ${videoList.length} 個影片`);
-                
-                // 檢查重複
-                if (videoList.some(v => v.id === id)) {
-                    console.error('❌ 影片ID已存在:', id);
-                    return res.status(400).json({
-                        success: false,
-                        error: '影片ID已存在',
-                        existingVideos: videoList.map(v => v.id)
-                    });
-                }
-                
-                // 添加新影片
-                const newVideo = {
-                    id,
-                    name,
-                    description: description || `${name} - YouTube影片播放量追蹤`,
-                    color: color || '#0070f3',
-                    startDate: new Date().toISOString().split('T')[0]
-                };
-                
-                videoList.push(newVideo);
-                
-                console.log(`💾 儲存配置，共 ${videoList.length} 個影片...`);
-                
-                // 儲存配置
-                const saveResult = await saveUserVideoConfig(videoList);
-                
-                if (!saveResult) {
-                    console.error('❌ 儲存配置失敗');
-                    return res.status(500).json({
-                        success: false,
-                        error: '儲存配置失敗，請檢查Gist設定'
-                    });
-                }
-                
-                console.log(`✅ 影片添加成功: ${name} (${id})`);
-                
-                return res.status(200).json({
-                    success: true,
-                    message: '影片添加成功',
-                    video: newVideo,
-                    total: videoList.length,
-                    timestamp: new Date().toISOString()
-                });
-            }
-                
-            case 'delete': {
-                // 刪除影片
-                console.log('🗑️ 刪除影片...', body);
-                const { id } = body;
-                
-                if (!id) {
-                    console.error('❌ 缺少影片ID');
-                    return res.status(400).json({
-                        success: false,
-                        error: '影片ID是必需的'
-                    });
-                }
-                
-                // 獲取當前配置
-                console.log('📥 獲取當前配置...');
-                const config = await getUserVideoConfig();
-                let videoList = Object.values(config.TRACKED_VIDEOS);
-                
-                console.log(`📊 當前有 ${videoList.length} 個影片`);
-                
-                // 檢查是否可以刪除（至少保留一個影片）
-                if (videoList.length <= 1) {
-                    console.error('❌ 無法刪除：至少需要保留一個追蹤影片');
-                    return res.status(400).json({
-                        success: false,
-                        error: '至少需要保留一個追蹤影片',
-                        currentCount: videoList.length
-                    });
-                }
-                
-                // 查找影片
-                const index = videoList.findIndex(v => v.id === id);
-                if (index === -1) {
-                    console.error('❌ 影片未找到:', id);
-                    return res.status(404).json({
-                        success: false,
-                        error: '影片未找到',
-                        availableVideos: videoList.map(v => v.id)
-                    });
-                }
-                
-                const deletedVideo = videoList[index];
-                videoList.splice(index, 1);
-                
-                console.log(`💾 儲存配置，刪除後剩餘 ${videoList.length} 個影片...`);
-                
-                // 儲存配置
-                const saveResult = await saveUserVideoConfig(videoList);
-                
-                if (!saveResult) {
-                    console.error('❌ 刪除配置失敗');
-                    return res.status(500).json({
-                        success: false,
-                        error: '刪除配置失敗，請檢查Gist設定'
-                    });
-                }
-                
-                console.log(`✅ 影片刪除成功: ${deletedVideo.name} (${id})`);
-                
-                return res.status(200).json({
-                    success: true,
-                    message: '影片刪除成功',
-                    deletedVideo,
-                    total: videoList.length,
-                    timestamp: new Date().toISOString()
-                });
-            }
-                
-            case 'update': {
-                // 更新影片
-                console.log('✏️ 更新影片...', body);
-                const { id, name, description, color } = body;
-                
-                if (!id) {
-                    console.error('❌ 缺少影片ID');
-                    return res.status(400).json({
-                        success: false,
-                        error: '影片ID是必需的'
-                    });
-                }
-                
-                // 獲取當前配置
-                console.log('📥 獲取當前配置...');
-                const config = await getUserVideoConfig();
-                let videoList = Object.values(config.TRACKED_VIDEOS);
-                
-                // 找到並更新影片
-                const index = videoList.findIndex(v => v.id === id);
-                if (index === -1) {
-                    console.error('❌ 影片未找到:', id);
-                    return res.status(404).json({
-                        success: false,
-                        error: '影片未找到',
-                        availableVideos: videoList.map(v => v.id)
-                    });
-                }
-                
-                // 記錄原始信息
-                const originalVideo = { ...videoList[index] };
-                
-                if (name) videoList[index].name = name;
-                if (description !== undefined) videoList[index].description = description;
-                if (color) videoList[index].color = color;
-                
-                console.log(`💾 儲存配置，更新影片: ${originalVideo.name} → ${videoList[index].name}...`);
-                
-                // 儲存配置
-                const saveResult = await saveUserVideoConfig(videoList);
-                
-                if (!saveResult) {
-                    console.error('❌ 更新配置失敗');
-                    return res.status(500).json({
-                        success: false,
-                        error: '更新配置失敗，請檢查Gist設定'
-                    });
-                }
-                
-                console.log(`✅ 影片更新成功: ${originalVideo.name} (${id})`);
-                
-                return res.status(200).json({
-                    success: true,
-                    message: '影片更新成功',
-                    original: originalVideo,
-                    updated: videoList[index],
-                    total: videoList.length,
-                    timestamp: new Date().toISOString()
-                });
-            }
-                
-            default:
-                console.error('❌ 未知的操作類型:', action);
-                return res.status(400).json({
-                    success: false,
-                    error: '未知的操作類型',
-                    allowedActions: ['get', 'add', 'delete', 'update'],
-                    received: action
-                });
-        }
-    } catch (error) {
-        console.error('❌ 影片管理操作失敗:', error);
         return res.status(500).json({
             success: false,
             error: '內部伺服器錯誤',
+            code: 'INTERNAL_ERROR',
             message: error.message,
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+            requestId,
             timestamp: new Date().toISOString()
         });
     }
