@@ -2,18 +2,17 @@
 const GIST_ID = process.env.GIST_ID;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
-// 【新增】導入影片配置
-let TRACKED_VIDEOS = {};
-let ALL_VIDEO_IDS = ['m2ANkjMRuXc']; // 默認值
+// 【修改】導入影片配置函數
+const { 
+    getUserVideoConfig,
+    getVideoById,
+    DEFAULT_TRACKED_VIDEOS,
+    DEFAULT_ALL_VIDEO_IDS 
+} = require('./videos-config');
 
-try {
-    const config = require('./videos-config');
-    TRACKED_VIDEOS = config.TRACKED_VIDEOS;
-    ALL_VIDEO_IDS = config.ALL_VIDEO_IDS;
-    console.log('✅ 載入影片配置成功，追蹤影片數:', ALL_VIDEO_IDS.length);
-} catch (error) {
-    console.warn('⚠️ 無法載入 videos-config.js，使用默認配置:', error.message);
-}
+// 預設值
+let TRACKED_VIDEOS = DEFAULT_TRACKED_VIDEOS;
+let ALL_VIDEO_IDS = DEFAULT_ALL_VIDEO_IDS;
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -27,26 +26,66 @@ export default async function handler(req, res) {
   }
 
   try {
+    // 【修改】動態獲取最新影片配置
+    const config = await getUserVideoConfig();
+    TRACKED_VIDEOS = config.TRACKED_VIDEOS;
+    ALL_VIDEO_IDS = config.ALL_VIDEO_IDS;
+    
+    console.log('✅ 載入動態影片配置，追蹤影片數:', ALL_VIDEO_IDS.length);
+    
+    // 【新增】如果有配置刷新參數，更新配置後重新導向
+    if (req.query.refreshConfig === 'true') {
+      console.log('🔄 強制刷新影片配置...');
+      // 重新載入配置
+      const refreshedConfig = await getUserVideoConfig(true); // 傳入 true 強制刷新
+      TRACKED_VIDEOS = refreshedConfig.TRACKED_VIDEOS;
+      ALL_VIDEO_IDS = refreshedConfig.ALL_VIDEO_IDS;
+      console.log('✅ 配置刷新完成，當前影片數:', ALL_VIDEO_IDS.length);
+    }
+
     // 【新增】從查詢參數獲取影片ID，預設第一個影片
     const { 
       videoId = ALL_VIDEO_IDS[0],  // 預設第一個影片
       range,       
       interval,    
       stats,       
-      limit        
+      limit,
+      refreshConfig
     } = req.query;
 
     console.log(`📡 API請求: videoId=${videoId}, range=${range}, interval=${interval}`);
 
-    // 【新增】驗證影片ID是否在追蹤清單中
-    if (!ALL_VIDEO_IDS.includes(videoId)) {
+// 【修改】驗證影片ID是否在追蹤清單中
+if (!ALL_VIDEO_IDS.includes(videoId)) {
+  // 【新增】嘗試重新載入配置
+  try {
+    console.log(`⚠️ 影片ID ${videoId} 不在當前配置中，嘗試重新載入配置...`);
+    const refreshedConfig = await getUserVideoConfig(true); // 強制刷新
+    const refreshedIds = refreshedConfig.ALL_VIDEO_IDS;
+    
+    if (refreshedIds.includes(videoId)) {
+      console.log(`✅ 重新載入後找到影片 ${videoId}，更新配置`);
+      ALL_VIDEO_IDS = refreshedIds;
+      TRACKED_VIDEOS = refreshedConfig.TRACKED_VIDEOS;
+    } else {
       return res.status(400).json({
         success: false,
         error: `未追蹤的影片ID: ${videoId}`,
-        availableVideos: ALL_VIDEO_IDS,
-        suggestion: `請使用以下ID之一: ${ALL_VIDEO_IDS.join(', ')}`
+        availableVideos: refreshedIds,
+        suggestion: `請使用以下ID之一: ${refreshedIds.join(', ')}`,
+        note: '如果您剛剛添加了這個影片，可能需要等待幾秒鐘讓配置同步'
       });
     }
+  } catch (refreshError) {
+    console.error('重新載入配置失敗:', refreshError);
+    return res.status(400).json({
+      success: false,
+      error: `未追蹤的影片ID: ${videoId}`,
+      availableVideos: ALL_VIDEO_IDS,
+      suggestion: `請使用以下ID之一: ${ALL_VIDEO_IDS.join(', ')}`
+    });
+  }
+}
 
     // 【修改】從Gist讀取對應影片的數據文件
     const fileName = `youtube-data-${videoId}.json`;  // 每個影片獨立檔案
@@ -203,13 +242,32 @@ export default async function handler(req, res) {
       console.log(`📊 統計信息計算完成`);
     }
 
-    // ========== 【新增】獲取影片資訊 ==========
-    const videoInfo = Object.values(TRACKED_VIDEOS).find(v => v.id === videoId) || {
+// ========== 【修改】獲取影片資訊 ==========
+let videoInfo = Object.values(TRACKED_VIDEOS).find(v => v.id === videoId);
+
+if (!videoInfo) {
+  console.warn(`⚠️ 未找到影片 ${videoId} 的詳細資訊，使用預設值`);
+  
+  // 【新增】嘗試使用 getVideoById 函數
+  const detailedInfo = getVideoById(videoId);
+  if (detailedInfo) {
+    videoInfo = detailedInfo;
+  } else {
+    // 回退到預設值
+    videoInfo = {
       id: videoId,
       name: videoId,
       color: '#0070f3',
       description: `YouTube 影片: ${videoId}`
     };
+    
+    // 【新增】如果是有效的YouTube ID格式，嘗試從YouTube獲取名稱
+    if (/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+      videoInfo.name = `YouTube影片 (${videoId})`;
+      videoInfo.description = `YouTube影片播放量追蹤: ${videoId}`;
+    }
+  }
+}
 
     // ========== 智能返回格式 ==========
     // 檢查是否有查詢參數

@@ -7,20 +7,25 @@ const GIST_ID = process.env.GIST_ID;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const CRON_AUTH_TOKEN = process.env.CRON_AUTH_TOKEN;
 
-// 【新增】導入影片配置
-let TRACKED_VIDEOS = {};
-let ALL_VIDEO_IDS = ['m2ANkjMRuXc']; // 默認值
+// 【修改】導入影片配置函數
+const { 
+    getUserVideoConfig, 
+    saveUserVideoConfig,
+    getVideoById,
+    DEFAULT_TRACKED_VIDEOS,
+    DEFAULT_ALL_VIDEO_IDS 
+} = require('./videos-config');
 
-try {
-    const config = require('./videos-config');
-    TRACKED_VIDEOS = config.TRACKED_VIDEOS;
-    ALL_VIDEO_IDS = config.ALL_VIDEO_IDS;
-    console.log('✅ 載入影片配置成功，追蹤影片數:', ALL_VIDEO_IDS.length);
-} catch (error) {
-    console.warn('⚠️ 無法載入 videos-config.js，使用默認配置:', error.message);
-}
+// 【修改】影片配置 - 改為動態獲取
+let TRACKED_VIDEOS = DEFAULT_TRACKED_VIDEOS;
+let ALL_VIDEO_IDS = DEFAULT_ALL_VIDEO_IDS;
 
 export default async function handler(req, res) {
+      // ==================== 【新增】配置管理端點 ====================
+    if (req.query.action === 'manage') {
+        return await handleVideoManagement(req, res);
+    }
+
   // ==================== 除錯模式 ====================
   if (req.query.debug === '1') {
     const authHeader = req.headers.authorization;
@@ -332,6 +337,217 @@ export default async function handler(req, res) {
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
+}
+
+// ==================== 【新增】影片管理API處理函數 ====================
+async function handleVideoManagement(req, res) {
+    if (req.method !== 'POST') {
+        return res.status(405).json({ 
+            success: false, 
+            error: 'Method not allowed. Use POST for management actions.' 
+        });
+    }
+
+    const { action } = req.query;
+    let body;
+
+    try {
+        body = req.body;
+        if (typeof body === 'string') {
+            body = JSON.parse(body);
+        }
+    } catch (e) {
+        return res.status(400).json({ 
+            success: false, 
+            error: 'Invalid JSON body' 
+        });
+    }
+
+    try {
+        switch (action) {
+            case 'get': {
+                // 獲取當前配置
+                const config = await getUserVideoConfig();
+                return res.status(200).json({
+                    success: true,
+                    videos: Object.values(config.TRACKED_VIDEOS),
+                    total: config.ALL_VIDEO_IDS.length
+                });
+            }
+                
+            case 'add': {
+                // 添加新影片
+                const { id, name, description, color } = body;
+                
+                if (!id || !name) {
+                    return res.status(400).json({
+                        success: false,
+                        error: '影片ID和名稱是必需的'
+                    });
+                }
+                
+                // 驗證YouTube影片ID格式
+                if (!/^[a-zA-Z0-9_-]{11}$/.test(id)) {
+                    return res.status(400).json({
+                        success: false,
+                        error: '無效的YouTube影片ID格式。應為11位字符'
+                    });
+                }
+                
+                // 獲取當前配置
+                const config = await getUserVideoConfig();
+                const videoList = Object.values(config.TRACKED_VIDEOS);
+                
+                // 檢查重複
+                if (videoList.some(v => v.id === id)) {
+                    return res.status(400).json({
+                        success: false,
+                        error: '影片ID已存在'
+                    });
+                }
+                
+                // 添加新影片
+                const newVideo = {
+                    id,
+                    name,
+                    description: description || `${name} - YouTube影片播放量追蹤`,
+                    color: color || '#0070f3',
+                    startDate: new Date().toISOString().split('T')[0]
+                };
+                
+                videoList.push(newVideo);
+                
+                // 儲存配置
+                const saveResult = await saveUserVideoConfig(videoList);
+                
+                if (!saveResult) {
+                    return res.status(500).json({
+                        success: false,
+                        error: '儲存配置失敗'
+                    });
+                }
+                
+                return res.status(200).json({
+                    success: true,
+                    message: '影片添加成功',
+                    video: newVideo,
+                    total: videoList.length
+                });
+            }
+                
+            case 'delete': {
+                // 刪除影片
+                const { id } = body;
+                
+                if (!id) {
+                    return res.status(400).json({
+                        success: false,
+                        error: '影片ID是必需的'
+                    });
+                }
+                
+                // 獲取當前配置
+                const config = await getUserVideoConfig();
+                let videoList = Object.values(config.TRACKED_VIDEOS);
+                
+                // 檢查是否可以刪除（至少保留一個影片）
+                if (videoList.length <= 1) {
+                    return res.status(400).json({
+                        success: false,
+                        error: '至少需要保留一個追蹤影片'
+                    });
+                }
+                
+                // 查找影片
+                const index = videoList.findIndex(v => v.id === id);
+                if (index === -1) {
+                    return res.status(404).json({
+                        success: false,
+                        error: '影片未找到'
+                    });
+                }
+                
+                const deletedVideo = videoList[index];
+                videoList.splice(index, 1);
+                
+                // 儲存配置
+                const saveResult = await saveUserVideoConfig(videoList);
+                
+                if (!saveResult) {
+                    return res.status(500).json({
+                        success: false,
+                        error: '刪除配置失敗'
+                    });
+                }
+                
+                return res.status(200).json({
+                    success: true,
+                    message: '影片刪除成功',
+                    deletedVideo,
+                    total: videoList.length
+                });
+            }
+                
+            case 'update': {
+                // 更新影片
+                const { id, name, description, color } = body;
+                
+                if (!id) {
+                    return res.status(400).json({
+                        success: false,
+                        error: '影片ID是必需的'
+                    });
+                }
+                
+                // 獲取當前配置
+                const config = await getUserVideoConfig();
+                let videoList = Object.values(config.TRACKED_VIDEOS);
+                
+                // 找到並更新影片
+                const index = videoList.findIndex(v => v.id === id);
+                if (index === -1) {
+                    return res.status(404).json({
+                        success: false,
+                        error: '影片未找到'
+                    });
+                }
+                
+                if (name) videoList[index].name = name;
+                if (description !== undefined) videoList[index].description = description;
+                if (color) videoList[index].color = color;
+                
+                // 儲存配置
+                const saveResult = await saveUserVideoConfig(videoList);
+                
+                if (!saveResult) {
+                    return res.status(500).json({
+                        success: false,
+                        error: '更新配置失敗'
+                    });
+                }
+                
+                return res.status(200).json({
+                    success: true,
+                    message: '影片更新成功',
+                    video: videoList[index],
+                    total: videoList.length
+                });
+            }
+                
+            default:
+                return res.status(400).json({
+                    success: false,
+                    error: '未知的操作類型'
+                });
+        }
+    } catch (error) {
+        console.error('影片管理操作失敗:', error);
+        return res.status(500).json({
+            success: false,
+            error: '內部伺服器錯誤',
+            message: error.message
+        });
+    }
 }
 
 export const config = {
