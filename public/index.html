@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="YouTube 多影片播放量追蹤儀表板">
     <title>YouTube 多影片播放量儀表板</title>
-    <!-- Chart.js 和 date-fns 適配器 -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
-    <script src="https://cdn.jsdelivr.net/npm/date-fns@3.6.0/+esm"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <!-- Chart.js date-fns adapter (bundled version) -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <style>
         :root {
             --primary-color: #0070f3;
@@ -1040,7 +1040,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>📊 YouTube 多影片播放量追蹤儀表板</h1>
+        <h1>YouTube 多影片播放量追蹤儀表板</h1>
         
         <!-- Toast 通知容器 -->
         <div class="toast-container" id="toastContainer" role="alert" aria-live="polite"></div>
@@ -1048,8 +1048,8 @@
         <!-- 影片管理面板 -->
         <div class="manage-videos-panel hidden" id="managePanel" role="dialog" aria-labelledby="managePanelTitle" aria-modal="true">
             <div class="panel-header">
-                <h3 id="managePanelTitle"><span>🎬</span> 影片管理</h3>
-                <button class="icon-btn" id="closeManage" aria-label="關閉影片管理面板">✕</button>
+                <h3 id="managePanelTitle"><span></span> 影片管理</h3>
+                <button class="icon-btn" id="closeManage" aria-label="關閉影片管理面板"></button>
             </div>
             
             <div class="add-video-form" role="form" aria-label="新增影片表單">
@@ -1079,7 +1079,7 @@
             </div>
             
             <div class="warning-text">
-                💡 提示：在 YouTube 影片網址中，v= 後面的 11 位字串就是影片 ID
+                提示：在 YouTube 影片網址中，v= 後面的 11 位字串就是影片 ID
             </div>
             
             <div class="video-list" id="videoList" role="list" aria-label="影片列表">
@@ -1095,21 +1095,21 @@
                     <!-- 選項會動態生成 -->
                 </select>
                 <button id="refreshButton" aria-label="刷新數據">
-                    <span class="button-text">🔄 刷新數據</span>
+                    <span class="button-text">重新整理</span>
                     <span class="loading hidden" aria-hidden="true"></span>
                 </button>
                 <button id="manageToggle" class="secondary" aria-label="管理影片">
-                    🎬 管理影片
+                    管理影片
                 </button>
                 <button id="compareToggle" class="secondary" aria-label="比較模式">
-                    📊 比較模式
+                    比較模式
                 </button>
             </div>
             
             <!-- 比較模式控制面板 -->
             <div class="compare-panel hidden" id="comparePanel" role="dialog" aria-labelledby="comparePanelTitle" aria-modal="true">
                 <div class="panel-header">
-                    <h3 id="comparePanelTitle">📊 影片比較</h3>
+                    <h3 id="comparePanelTitle">影片比較</h3>
                     <button class="icon-btn" id="closeCompare" aria-label="關閉比較面板">✕</button>
                 </div>
                 <div class="compare-selection">
@@ -1134,7 +1134,7 @@
                 <h3 id="currentVideoName">純粹とは何か?</h3>
                 <p id="currentVideoDescription">主要追蹤的 YouTube 影片</p>
                 <a id="currentVideoLink" href="https://www.youtube.com/watch?v=m2ANkjMRuXc" target="_blank" rel="noopener noreferrer" aria-label="在 YouTube 上觀看此影片">
-                    🔗 前往 YouTube 觀看
+                    前往 YouTube 觀看
                 </a>
             </div>
         </div>
@@ -1142,9 +1142,9 @@
         <!-- 比較結果區域 -->
         <div class="compare-results hidden" id="compareResults" role="region" aria-label="比較結果">
             <div class="compare-results-header">
-                <h3>📈 影片比較結果</h3>
+                <h3>影片比較結果</h3>
                 <div class="compare-actions">
-                    <button id="exportCompare" class="secondary">📥 導出比較數據</button>
+                    <button id="exportCompare" class="secondary">導出比較數據</button>
                     <button id="closeCompareResults" class="icon-btn" aria-label="關閉比較結果">✕</button>
                 </div>
             </div>
@@ -1159,7 +1159,7 @@
             </div>
             
             <div class="compare-table-container">
-                <h4>📋 詳細比較數據</h4>
+                <h4>詳細比較數據</h4>
                 <table id="compareTable" aria-label="比較數據表格">
                     <thead>
                         <tr>
@@ -1179,7 +1179,7 @@
             <div class="auto-refresh-control">
                 <label>
                     <input type="checkbox" id="autoRefreshCheckbox" aria-label="啟用自動刷新">
-                    ⚡ 自動刷新
+                    自動刷新
                 </label>
                 <select id="refreshInterval" aria-label="選擇刷新間隔">
                     <option value="1">每 1 分鐘</option>
@@ -1190,7 +1190,7 @@
                 </select>
                 <span class="refresh-info" id="nextRefreshInfo" aria-live="polite"></span>
                 <button id="exportData" class="secondary" aria-label="導出數據">
-                    📥 導出數據
+                    導出數據
                 </button>
             </div>
         </div>
@@ -1203,17 +1203,17 @@
         <!-- 數據統計卡片 -->
         <div class="stats-grid" id="statsCards" role="list" aria-label="統計數據">
             <div class="stat-card" role="listitem">
-                <h3>🎯 當前播放量</h3>
+                <h3>目前播放次數</h3>
                 <p class="value" id="currentViews">--</p>
                 <div class="trend neutral" id="currentTrend">--</div>
             </div>
             <div class="stat-card" role="listitem">
-                <h3>📈 今日增長</h3>
+                <h3>今日增長</h3>
                 <p class="value" id="todayGrowth">--</p>
                 <div class="trend neutral" id="todayTrend">--</div>
             </div>
             <div class="stat-card" role="listitem">
-                <h3>⏱️ 平均每小時</h3>
+                <h3>平均每小時</h3>
                 <p class="value" id="avgHourly">--</p>
                 <div class="trend neutral" id="hourlyTrend">--</div>
             </div>
@@ -1226,13 +1226,13 @@
         
         <!-- 表格區域 -->
         <div id="dataTableContainer">
-            <h2>📋 詳細數據</h2>
+            <h2>詳細數據</h2>
             <table id="dataTable" aria-label="播放量詳細數據">
                 <thead>
                     <tr>
                         <th>日期時間</th>
-                        <th>播放量</th>
-                        <th>播放量變化</th>
+                        <th>播放次數</th>
+                        <th>播放次數變化</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1243,7 +1243,100 @@
     </div>
 
     <script>
-        // ==================== 命名空間 ====================
+        // ==================== 本地儲存管理 ====================
+        const StorageManager = {
+            get(key, defaultValue = null) {
+                try {
+                    const item = localStorage.getItem(key);
+                    if (item === null) return defaultValue;
+                    return JSON.parse(item);
+                } catch (error) {
+                    if (error.name === 'QuotaExceededError') {
+                        console.warn('本地儲存空間已滿');
+                    }
+                    return defaultValue;
+                }
+            },
+            
+            set(key, value) {
+                try {
+                    localStorage.setItem(key, JSON.stringify(value));
+                } catch (error) {
+                    console.error('儲存失敗:', error);
+                    // 嘗試清理後重試
+                    this.cleanExpiredData();
+                    try {
+                        localStorage.setItem(key, JSON.stringify(value));
+                    } catch (retryError) {
+                        console.error('重試儲存仍失敗:', retryError);
+                    }
+                }
+            },
+            
+            cleanExpiredData() {
+                // 清理過期資料的邏輯
+                const keys = ['videoOptions', 'selectedVideoId', 'autoRefreshEnabled', 'refreshInterval'];
+                const now = Date.now();
+                
+                keys.forEach(key => {
+                    try {
+                        const item = localStorage.getItem(key);
+                        if (item) {
+                            // 檢查是否存在舊格式資料需要清理
+                        }
+                    } catch (e) {
+                        // 忽略錯誤
+                    }
+                });
+            }
+        };
+
+        // ==================== 工具函式 ====================
+        function formatNumberWithCommas(num) {
+            if (typeof num !== 'number' || isNaN(num)) return '--';
+            return num.toLocaleString('zh-TW');
+        }
+        
+        function updateTrendElement(elementId, text, trendClass) {
+            const element = document.getElementById(elementId);
+            if (element) {
+                element.textContent = text;
+                element.className = 'trend ' + trendClass;
+            }
+        }
+        
+        function findClosestIndex(data, targetTimestamp) {
+            let closestIndex = -1;
+            let minDiff = Infinity;
+            
+            for (let i = 0; i < data.length; i++) {
+                const diff = Math.abs(data[i].timestamp - targetTimestamp);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    closestIndex = i;
+                }
+            }
+            
+            return closestIndex;
+        }
+        
+        // ==================== Toast 通知 ====================
+        function showToast(message, type = 'info', duration = 4000) {
+            const toastContainer = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = 'toast ' + type;
+            toast.textContent = message;
+            toast.setAttribute('role', 'alert');
+            
+            toastContainer.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.animation = 'slideOut 0.3s ease forwards';
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        }
+        
+        // ==================== 影片追蹤器 ====================
         const YouTubeTracker = {
             // 狀態管理
             state: {
@@ -1257,23 +1350,53 @@
                 videoOptions: [],
                 selectedColor: '#0070f3',
                 comparedVideos: [],
-                compareMode: false
+                compareMode: false,
+                isInitialized: false
             },
             
             // DOM 元素快取
             elements: {},
             
             // 初始化
-            init() {
-                this.cacheElements();
-                this.setupEventListeners();
-                this.loadVideoList().then(() => {
+            async init() {
+                try {
+                    this.cacheElements();
+                    this.setupEventListeners();
+                    
+                    // 載入影片列表並等待完成
+                    await this.loadVideoList();
+                    
+                    // 初始化其他功能
                     this.setupAutoRefresh();
                     this.setupVideoManagement();
                     this.setupCompareMode();
                     this.setupExportFunction();
-                    this.loadChartData();
-                });
+                    
+                    // 載入圖表數據
+                    await this.loadChartData();
+                    
+                    this.state.isInitialized = true;
+                    console.log('YouTubeTracker 初始化完成');
+                    
+                } catch (error) {
+                    console.error('初始化失敗:', error);
+                    this.showToast('初始化失敗: ' + error.message, 'error');
+                    
+                    // 即使失敗也要嘗試載入預設數據
+                    this.state.videoOptions = StorageManager.get('videoOptions', [
+                        { id: 'm2ANkjMRuXc', name: '純粹とは何か?', color: '#0070f3', description: '主要追蹤的 YouTube 影片' }
+                    ]);
+                    this.updateVideoSelector();
+                    this.updateVideoInfo();
+                    
+                    // 嘗試載入圖表
+                    try {
+                        await this.loadChartData();
+                    } catch (chartError) {
+                        console.error('載入圖表失敗:', chartError);
+                        document.getElementById('status').innerHTML = '❌ 載入失敗，請重新整理頁面 <button onclick="location.reload()">重新整理</button>';
+                    }
+                }
             },
             
             // 快取 DOM 元素
@@ -1378,54 +1501,15 @@
                 });
             },
             
-            // ==================== 工具函式 ====================
-            formatNumberWithCommas(num) {
-                if (typeof num !== 'number' || isNaN(num)) return '--';
-                return num.toLocaleString('zh-TW');
-            },
-            
-            updateTrendElement(elementId, text, trendClass) {
-                const element = document.getElementById(elementId);
-                if (element) {
-                    element.textContent = text;
-                    element.className = 'trend ' + trendClass;
-                }
-            },
-            
-            findClosestIndex(data, targetTimestamp) {
-                let closestIndex = -1;
-                let minDiff = Infinity;
-                
-                for (let i = 0; i < data.length; i++) {
-                    const diff = Math.abs(data[i].timestamp - targetTimestamp);
-                    if (diff < minDiff) {
-                        minDiff = diff;
-                        closestIndex = i;
-                    }
-                }
-                
-                return closestIndex;
-            },
-            
-            // Toast 通知
-            showToast(message, type = 'info', duration = 4000) {
-                const toast = document.createElement('div');
-                toast.className = `toast ${type}`;
-                toast.textContent = message;
-                toast.setAttribute('role', 'alert');
-                
-                this.elements.toastContainer.appendChild(toast);
-                
-                setTimeout(() => {
-                    toast.style.animation = 'slideOut 0.3s ease forwards';
-                    setTimeout(() => toast.remove(), 300);
-                }, duration);
-            },
-            
             // ==================== 影片列表管理 ====================
             async loadVideoList() {
                 try {
                     const response = await fetch('/api/fetch-and-store-multi?action=get');
+                    
+                    if (!response.ok) {
+                        throw new Error('API 請求失敗: ' + response.status);
+                    }
+                    
                     const result = await response.json();
                     
                     if (result.success && result.data && result.data.length > 0) {
@@ -1455,12 +1539,16 @@
                     
                 } catch (error) {
                     console.error('載入影片列表失敗:', error);
+                    // 使用本地快取
                     this.state.videoOptions = StorageManager.get('videoOptions', [
                         { id: 'm2ANkjMRuXc', name: '純粹とは何か?', color: '#0070f3', description: '主要追蹤的 YouTube 影片' }
                     ]);
                     this.updateVideoSelector();
                     this.updateCompareCheckboxes();
+                    this.updateVideoInfo();
                     this.showToast('載入影片列表失敗，使用本地快取', 'warning');
+                    
+                    // 不拋出錯誤，讓初始化繼續
                 }
             },
             
@@ -1478,6 +1566,9 @@
                 
                 select.value = this.state.currentVideoId;
                 
+                // 移除舊的事件監聽器
+                select.onchange = null;
+                
                 select.addEventListener('change', (e) => {
                     this.state.currentVideoId = e.target.value;
                     const video = this.state.videoOptions.find(v => v.id === e.target.value);
@@ -1494,7 +1585,7 @@
                 const video = this.state.videoOptions.find(v => v.id === this.state.currentVideoId);
                 if (video) {
                     this.elements.currentVideoName.textContent = video.name;
-                    this.elements.currentVideoDescription.textContent = video.description;
+                    this.elements.currentVideoDescription.textContent = video.description || '';
                     this.elements.currentVideoLink.href = `https://www.youtube.com/watch?v=${video.id}`;
                     this.elements.currentVideoLink.setAttribute('aria-label', `在 YouTube 上觀看 ${video.name}`);
                 }
@@ -1524,7 +1615,7 @@
                 // 關閉管理面板
                 this.elements.closeManage.addEventListener('click', () => {
                     this.elements.managePanel.classList.add('hidden');
-                    this.elements.manageToggle.textContent = '🎬 管理影片';
+                    this.elements.manageToggle.textContent = '管理影片';
                     this.elements.manageToggle.setAttribute('aria-label', '管理影片');
                 });
                 
@@ -1535,7 +1626,7 @@
                 this.elements.manageToggle.addEventListener('click', () => {
                     this.elements.managePanel.classList.toggle('hidden');
                     if (this.elements.managePanel.classList.contains('hidden')) {
-                        this.elements.manageToggle.textContent = '🎬 管理影片';
+                        this.elements.manageToggle.textContent = '管理影片';
                         this.elements.manageToggle.setAttribute('aria-label', '管理影片');
                     } else {
                         this.elements.manageToggle.textContent = '✕ 關閉管理';
@@ -1546,247 +1637,132 @@
             },
             
             selectColor(option) {
-                this.state.selectedColor = option.getAttribute('data-color');
-                
+                const color = option.getAttribute('data-color');
+                this.state.selectedColor = color;
+                this.elements.selectedColor.style.backgroundColor = color;
                 this.elements.colorOptions.querySelectorAll('.color-option').forEach(opt => {
                     opt.classList.remove('selected');
                     opt.setAttribute('aria-selected', 'false');
                 });
                 option.classList.add('selected');
                 option.setAttribute('aria-selected', 'true');
-                
-                this.elements.selectedColor.style.backgroundColor = this.state.selectedColor;
                 this.elements.colorOptions.classList.remove('visible');
-            },
-            
-            loadVideoListToManagement() {
-                const container = this.elements.videoList;
-                
-                if (this.state.videoOptions.length === 0) {
-                    container.innerHTML = '<div class="empty-list">暫無追蹤影片，請添加新影片</div>';
-                    return;
-                }
-                
-                container.innerHTML = '';
-                
-                this.state.videoOptions.forEach((video, index) => {
-                    const videoItem = document.createElement('div');
-                    videoItem.className = 'video-item';
-                    videoItem.innerHTML = `
-                        <div class="video-item-info">
-                            <div class="video-item-color" style="background-color: ${video.color};"></div>
-                            <div class="video-item-details">
-                                <div class="video-item-name">${video.name}</div>
-                                <div class="video-item-id">${video.id}</div>
-                            </div>
-                        </div>
-                        <div class="video-item-actions">
-                            <button class="action-btn edit" data-index="${index}">編輯</button>
-                            <button class="action-btn delete" data-index="${index}">刪除</button>
-                        </div>
-                    `;
-                    container.appendChild(videoItem);
-                });
-                
-                // 添加事件監聽器
-                container.querySelectorAll('.action-btn.edit').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        const index = parseInt(e.target.getAttribute('data-index'));
-                        this.editVideo(index);
-                    });
-                });
-                
-                container.querySelectorAll('.action-btn.delete').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        const index = parseInt(e.target.getAttribute('data-index'));
-                        this.deleteVideo(index);
-                    });
-                });
             },
             
             async addNewVideo() {
                 const name = this.elements.newVideoName.value.trim();
                 const id = this.elements.newVideoId.value.trim();
-                const color = this.state.selectedColor;
                 
-                if (!name) {
-                    this.showToast('請輸入影片名稱', 'error');
-                    this.elements.newVideoName.focus();
+                if (!name || !id) {
+                    this.showToast('請輸入影片名稱和 ID', 'warning');
                     return;
                 }
                 
-                if (!id) {
-                    this.showToast('請輸入影片 ID', 'error');
-                    this.elements.newVideoId.focus();
+                // 驗證 YouTube ID 格式
+                const youtubeIdRegex = /^[a-zA-Z0-9_-]{11}$/;
+                if (!youtubeIdRegex.test(id)) {
+                    this.showToast('無效的 YouTube 影片 ID，請檢查格式', 'error');
                     return;
                 }
                 
-                if (!/^[a-zA-Z0-9_-]{11}$/.test(id)) {
-                    this.showToast('YouTube 影片 ID 格式錯誤，應為 11 位字符', 'error');
-                    this.elements.newVideoId.focus();
+                // 檢查是否已存在
+                if (this.state.videoOptions.some(v => v.id === id)) {
+                    this.showToast('此影片已存在', 'warning');
                     return;
                 }
-                
-                if (this.state.videoOptions.some(video => video.id === id)) {
-                    this.showToast('影片 ID 已存在', 'error');
-                    this.elements.newVideoId.focus();
-                    return;
-                }
-                
-                const originalButtonText = this.elements.addVideoBtn.textContent;
-                this.elements.addVideoBtn.textContent = '添加中...';
-                this.elements.addVideoBtn.disabled = true;
                 
                 try {
                     const response = await fetch('/api/fetch-and-store-multi?action=add', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            id,
-                            name,
-                            color,
-                            description: `${name} - YouTube 影片播放量追蹤`
+                        body: JSON.stringify({ 
+                            id: id,
+                            name: name,
+                            color: this.state.selectedColor,
+                            description: `YouTube 影片: ${name}`
                         })
                     });
                     
                     const result = await response.json();
                     
                     if (!result.success) {
-                        this.showToast(`後端添加失敗: ${result.error}`, 'error');
+                        this.showToast('後端添加失敗: ' + result.error, 'error');
                         return;
                     }
                     
-                    // 更新本地列表
-                    this.state.videoOptions.push({ id, name, color, description: `${name} - YouTube 影片播放量追蹤` });
+                    // 添加到本地
+                    this.state.videoOptions.push({
+                        id: id,
+                        name: name,
+                        color: this.state.selectedColor,
+                        description: `YouTube 影片: ${name}`
+                    });
                     StorageManager.set('videoOptions', this.state.videoOptions);
-                    
-                    // 清空輸入框
-                    this.elements.newVideoName.value = '';
-                    this.elements.newVideoId.value = '';
                     
                     // 更新 UI
                     this.updateVideoSelector();
                     this.updateCompareCheckboxes();
                     this.loadVideoListToManagement();
-                    this.showToast(`影片 "${name}" 已成功添加`, 'success');
                     
-                    // 自動選擇新添加的影片
-                    this.elements.videoSelect.value = id;
-                    this.state.currentVideoId = id;
-                    this.state.currentVideoColor = color;
-                    StorageManager.set('selectedVideoId', id);
-                    this.updateVideoInfo();
-                    this.loadChartData();
+                    // 清空表單
+                    this.elements.newVideoName.value = '';
+                    this.elements.newVideoId.value = '';
+                    
+                    this.showToast(`影片 "${name}" 已添加`, 'success');
                     
                 } catch (error) {
                     console.error('添加影片失敗:', error);
                     this.showToast('添加影片失敗，請稍後重試', 'error');
-                } finally {
-                    this.elements.addVideoBtn.textContent = originalButtonText;
-                    this.elements.addVideoBtn.disabled = false;
                 }
             },
             
-            async editVideo(index) {
-                const video = this.state.videoOptions[index];
-                
-                this.elements.newVideoName.value = video.name;
-                this.elements.newVideoId.value = video.id;
-                this.elements.newVideoId.disabled = true;
-                
-                this.state.selectedColor = video.color;
-                this.elements.selectedColor.style.backgroundColor = video.color;
-                
-                this.elements.colorOptions.querySelectorAll('.color-option').forEach(opt => {
-                    opt.classList.remove('selected');
-                    opt.setAttribute('aria-selected', 'false');
-                    if (opt.getAttribute('data-color') === video.color) {
-                        opt.classList.add('selected');
-                        opt.setAttribute('aria-selected', 'true');
-                    }
-                });
-                
-                this.state.videoOptions.splice(index, 1);
-                StorageManager.set('videoOptions', this.state.videoOptions);
-                
-                this.updateVideoSelector();
-                this.updateCompareCheckboxes();
-                this.loadVideoListToManagement();
-                
-                this.showToast('請修改資訊後重新添加', 'info');
-                this.elements.addVideoBtn.textContent = '更新影片';
-                this.elements.addVideoBtn.onclick = () => this.updateVideoAfterEdit();
-            },
-            
-            async updateVideoAfterEdit() {
-                const name = this.elements.newVideoName.value.trim();
-                const id = this.elements.newVideoId.value.trim();
-                const color = this.state.selectedColor;
-                
-                if (!name) {
-                    this.showToast('請輸入影片名稱', 'error');
-                    return;
-                }
-                
-                this.elements.addVideoBtn.textContent = '更新中...';
-                this.elements.addVideoBtn.disabled = true;
+            async editVideo(video) {
+                const newName = prompt('輸入新的影片名稱:', video.name);
+                if (!newName || newName.trim() === video.name) return;
                 
                 try {
                     const response = await fetch('/api/fetch-and-store-multi?action=update', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ id, name, color })
+                        body: JSON.stringify({ 
+                            id: video.id,
+                            name: newName.trim(),
+                            color: video.color,
+                            description: video.description
+                        })
                     });
                     
                     const result = await response.json();
                     
                     if (!result.success) {
-                        this.showToast(`後端更新失敗: ${result.error}`, 'error');
+                        this.showToast('後端更新失敗: ' + result.error, 'error');
                         return;
                     }
                     
                     // 更新本地
-                    this.state.videoOptions.push({ id, name, color, description: `${name} - YouTube 影片播放量追蹤` });
-                    StorageManager.set('videoOptions', this.state.videoOptions);
+                    const index = this.state.videoOptions.findIndex(v => v.id === video.id);
+                    if (index >= 0) {
+                        this.state.videoOptions[index].name = newName.trim();
+                        StorageManager.set('videoOptions', this.state.videoOptions);
+                    }
                     
-                    // 重置表單
-                    this.resetAddForm();
+                    // 更新 UI
+                    this.updateVideoSelector();
+                    this.updateCompareCheckboxes();
                     this.loadVideoListToManagement();
-                    this.showToast(`影片 "${name}" 已成功更新`, 'success');
+                    this.updateVideoInfo();
+                    
+                    this.showToast('影片名稱已更新', 'success');
                     
                 } catch (error) {
                     console.error('更新影片失敗:', error);
                     this.showToast('更新影片失敗，請稍後重試', 'error');
-                } finally {
-                    this.elements.addVideoBtn.textContent = '添加影片';
-                    this.elements.addVideoBtn.disabled = false;
-                    this.elements.addVideoBtn.onclick = () => this.addNewVideo();
                 }
             },
             
-            resetAddForm() {
-                this.elements.newVideoName.value = '';
-                this.elements.newVideoId.value = '';
-                this.elements.newVideoId.disabled = false;
-                this.state.selectedColor = '#0070f3';
-                this.elements.selectedColor.style.backgroundColor = '#0070f3';
-                this.elements.colorOptions.querySelectorAll('.color-option').forEach((opt, i) => {
-                    opt.classList.toggle('selected', i === 0);
-                    opt.setAttribute('aria-selected', i === 0);
-                });
-            },
-            
-            async deleteVideo(index) {
-                const video = this.state.videoOptions[index];
-                
-                if (!confirm(`確定要刪除影片 "${video.name}" 嗎？此操作無法復原。`)) {
+            async deleteVideo(video, index) {
+                if (!confirm(`確定要刪除 "${video.name}" 嗎？\n這將從所有設備的追蹤列表中移除。`)) {
                     return;
-                }
-                
-                const deleteButtons = this.elements.videoList.querySelectorAll('.action-btn.delete');
-                if (deleteButtons[index]) {
-                    deleteButtons[index].textContent = '刪除中...';
-                    deleteButtons[index].disabled = true;
                 }
                 
                 try {
@@ -1799,7 +1775,7 @@
                     const result = await response.json();
                     
                     if (!result.success) {
-                        this.showToast(`後端刪除失敗: ${result.error}`, 'error');
+                        this.showToast('後端刪除失敗: ' + result.error, 'error');
                         return;
                     }
                     
@@ -1843,6 +1819,50 @@
                 }
             },
             
+            loadVideoListToManagement() {
+                const videoList = this.elements.videoList;
+                videoList.innerHTML = '';
+                
+                if (this.state.videoOptions.length === 0) {
+                    videoList.innerHTML = '<div class="empty-list">暫無影片，請添加新影片</div>';
+                    return;
+                }
+                
+                this.state.videoOptions.forEach((video, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'video-item';
+                    div.innerHTML = `
+                        <div class="video-item-info">
+                            <div class="video-item-color" style="background-color: ${video.color}"></div>
+                            <div class="video-item-details">
+                                <div class="video-item-name">${video.name}</div>
+                                <div class="video-item-id">${video.id}</div>
+                            </div>
+                        </div>
+                        <div class="video-item-actions">
+                            <button class="action-btn edit" data-action="edit" data-index="${index}">編輯</button>
+                            <button class="action-btn delete" data-action="delete" data-index="${index}">刪除</button>
+                        </div>
+                    `;
+                    videoList.appendChild(div);
+                });
+                
+                // 為按鈕添加事件監聽器
+                videoList.querySelectorAll('.action-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const index = parseInt(e.target.getAttribute('data-index'));
+                        const action = e.target.getAttribute('data-action');
+                        const video = this.state.videoOptions[index];
+                        
+                        if (action === 'edit') {
+                            this.editVideo(video);
+                        } else if (action === 'delete') {
+                            this.deleteVideo(video, index);
+                        }
+                    });
+                });
+            },
+            
             // ==================== 圖表數據載入 ====================
             async loadChartData() {
                 if (this.state.compareMode) {
@@ -1860,25 +1880,31 @@
                 statusDiv.innerHTML = '<span class="loading"></span>載入數據中...';
                 
                 try {
-                    const response = await fetch(`/api/chart-data?videoId=${this.state.currentVideoId}&range=720&stats=true`);
+                    const url = `/api/chart-data?videoId=${this.state.currentVideoId}&range=720&stats=true`;
+                    console.log('載入圖表數據:', url);
+                    
+                    const response = await fetch(url);
                     
                     if (!response.ok) {
-                        const errorData = await response.json();
+                        const errorData = await response.json().catch(() => ({}));
                         throw new Error(errorData.error || `HTTP ${response.status}`);
                     }
                     
                     const result = await response.json();
+                    console.log('API 響應:', result);
                     
                     let data;
                     if (Array.isArray(result)) {
                         data = result;
-                    } else if (result.data) {
+                    } else if (result && typeof result === 'object' && result.data) {
                         data = result.data;
                     } else {
                         throw new Error('無效的 API 響應格式');
                     }
                     
-                    if (data.length === 0) {
+                    console.log('解析後的數據:', data);
+                    
+                    if (!Array.isArray(data) || data.length === 0) {
                         statusDiv.textContent = '暫無數據，影片數據將在下次收集時顯示';
                         this.resetStatsCards();
                         return;
@@ -1896,7 +1922,7 @@
                         minute: '2-digit',
                         hour12: false
                     });
-                    statusDiv.textContent = `✅ 數據已更新於 ${timeStr}`;
+                    statusDiv.textContent = `數據已更新於 ${timeStr}`;
                     
                     if (this.state.isAutoRefreshEnabled) {
                         this.updateNextRefreshTime();
@@ -1904,7 +1930,7 @@
                     
                 } catch (error) {
                     console.error('載入數據失敗:', error);
-                    statusDiv.innerHTML = `❌ 載入失敗: ${error.message} <button onclick="YouTubeTracker.loadChartData()">重試</button>`;
+                    statusDiv.innerHTML = `載入失敗: ${error.message} <button onclick="YouTubeTracker.loadChartData()">重試</button>`;
                     this.showToast(`載入失敗: ${error.message}`, 'error');
                 } finally {
                     loadingSpan.classList.add('hidden');
@@ -1924,26 +1950,26 @@
                 const currentData = sortedData[sortedData.length - 1];
                 const currentViews = currentData.viewCount;
                 
-                document.getElementById('currentViews').textContent = this.formatNumberWithCommas(currentViews);
+                document.getElementById('currentViews').textContent = formatNumberWithCommas(currentViews);
                 
                 // 計算趨勢
                 let currentTrend = 'neutral';
                 let currentTrendText = '穩定';
                 if (sortedData.length >= 2) {
-                    const prevHourIndex = this.findClosestIndex(sortedData, Date.now() - 60*60*1000);
+                    const prevHourIndex = findClosestIndex(sortedData, Date.now() - 60*60*1000);
                     if (prevHourIndex >= 0) {
                         const prevViews = sortedData[prevHourIndex].viewCount;
                         const diff = currentViews - prevViews;
                         if (diff > 0) {
                             currentTrend = 'positive';
-                            currentTrendText = `↑ 比 1 小時前 +${this.formatNumberWithCommas(diff)}`;
+                            currentTrendText = `比 1 小時前 +${formatNumberWithCommas(diff)}`;
                         } else if (diff < 0) {
                             currentTrend = 'negative';
-                            currentTrendText = `↓ 比 1 小時前 ${this.formatNumberWithCommas(diff)}`;
+                            currentTrendText = `比 1 小時前 ${formatNumberWithCommas(diff)}`;
                         }
                     }
                 }
-                this.updateTrendElement('currentTrend', currentTrendText, currentTrend);
+                updateTrendElement('currentTrend', currentTrendText, currentTrend);
                 
                 // 今日增長
                 const today = new Date().toDateString();
@@ -1965,10 +1991,10 @@
                     }
                     
                     document.getElementById('todayGrowth').textContent = 
-                        (todayGrowth > 0 ? '+' : '') + this.formatNumberWithCommas(todayGrowth);
+                        (todayGrowth > 0 ? '+' : '') + formatNumberWithCommas(todayGrowth);
                     
                     todayTrend = todayGrowth > 0 ? 'positive' : todayGrowth < 0 ? 'negative' : 'neutral';
-                    this.updateTrendElement('todayTrend', 
+                    updateTrendElement('todayTrend', 
                         todayGrowthPercent !== 0 ? 
                             `今日${todayGrowth > 0 ? '增長' : '減少'} ${Math.abs(todayGrowthPercent)}%` : 
                             `今日持平`,
@@ -1976,7 +2002,7 @@
                     );
                 } else {
                     document.getElementById('todayGrowth').textContent = '--';
-                    this.updateTrendElement('todayTrend', '數據不足', 'neutral');
+                    updateTrendElement('todayTrend', '數據不足', 'neutral');
                 }
                 
                 // 平均每小時
@@ -1990,16 +2016,16 @@
                     avgHourly = Math.round(totalGrowth / (last24h.length - 1));
                     
                     document.getElementById('avgHourly').textContent = 
-                        (avgHourly > 0 ? '+' : '') + this.formatNumberWithCommas(avgHourly);
+                        (avgHourly > 0 ? '+' : '') + formatNumberWithCommas(avgHourly);
                     
                     const hourlyTrend = avgHourly > 0 ? 'positive' : avgHourly < 0 ? 'negative' : 'neutral';
-                    this.updateTrendElement('hourlyTrend', 
+                    updateTrendElement('hourlyTrend', 
                         avgHourly > 0 ? `穩定增長` : avgHourly < 0 ? `增長放緩` : `保持平穩`,
                         hourlyTrend
                     );
                 } else {
                     document.getElementById('avgHourly').textContent = '--';
-                    this.updateTrendElement('hourlyTrend', '數據不足', 'neutral');
+                    updateTrendElement('hourlyTrend', '數據不足', 'neutral');
                 }
             },
             
@@ -2008,9 +2034,9 @@
                 document.getElementById('todayGrowth').textContent = '--';
                 document.getElementById('avgHourly').textContent = '--';
                 
-                this.updateTrendElement('currentTrend', '無數據', 'neutral');
-                this.updateTrendElement('todayTrend', '無數據', 'neutral');
-                this.updateTrendElement('hourlyTrend', '無數據', 'neutral');
+                updateTrendElement('currentTrend', '無數據', 'neutral');
+                updateTrendElement('todayTrend', '無數據', 'neutral');
+                updateTrendElement('hourlyTrend', '無數據', 'neutral');
             },
             
             // ==================== 圖表功能 ====================
@@ -2064,7 +2090,7 @@
                     type: 'line',
                     data: {
                         datasets: [{
-                            label: '播放量',
+                            label: '播放次數',
                             data: chartData,
                             borderColor: this.state.currentVideoColor,
                             backgroundColor: this.state.currentVideoColor + '20',
@@ -2134,11 +2160,6 @@
                                     },
                                     tooltipFormat: 'yyyy-MM-dd HH:mm'
                                 },
-                                adapters: {
-                                    date: {
-                                        locale: window.dateFnsLocale
-                                    }
-                                },
                                 title: {
                                     display: true,
                                     text: '時間',
@@ -2160,7 +2181,7 @@
                                 type: 'linear',
                                 title: {
                                     display: true,
-                                    text: '播放量',
+                                    text: '播放次數',
                                     font: { size: isMobile ? 12 : 14 }
                                 },
                                 suggestedMin: suggestedMin,
@@ -2228,13 +2249,13 @@
                     tdDateTime.textContent = row.dateTime;
                     
                     const tdViewCount = document.createElement('td');
-                    tdViewCount.textContent = this.formatNumberWithCommas(row.viewCount);
+                    tdViewCount.textContent = formatNumberWithCommas(row.viewCount);
                     
                     const tdChange = document.createElement('td');
                     if (row.change !== null) {
                         const changeText = row.change > 0 ? 
-                            '+' + this.formatNumberWithCommas(row.change) : 
-                            this.formatNumberWithCommas(row.change);
+                            '+' + formatNumberWithCommas(row.change) : 
+                            formatNumberWithCommas(row.change);
                         tdChange.textContent = changeText;
                         
                         if (row.change > 0) {
@@ -2312,12 +2333,12 @@
                 const minutes = parseInt(this.elements.refreshInterval.value);
                 const intervalMs = minutes * 60 * 1000;
                 
-                console.log(`✅ 自動刷新已啟用: 每 ${minutes} 分鐘`);
+                console.log(`自動刷新已啟用: 每 ${minutes} 分鐘`);
                 
                 this.loadChartData();
                 
                 this.state.autoRefreshInterval = setInterval(() => {
-                    console.log(`🔄 自動刷新執行於 ${new Date().toLocaleTimeString()}`);
+                    console.log(`自動刷新執行於 ${new Date().toLocaleTimeString()}`);
                     this.loadChartData();
                 }, intervalMs);
                 
@@ -2329,7 +2350,7 @@
                     clearInterval(this.state.autoRefreshInterval);
                     this.state.autoRefreshInterval = null;
                 }
-                console.log('⏹️ 自動刷新已停止');
+                console.log('自動刷新已停止');
             },
             
             updateNextRefreshTime() {
@@ -2350,7 +2371,7 @@
                 this.elements.compareToggle.addEventListener('click', () => {
                     this.elements.comparePanel.classList.toggle('hidden');
                     if (this.elements.comparePanel.classList.contains('hidden')) {
-                        this.elements.compareToggle.textContent = '📊 比較模式';
+                        this.elements.compareToggle.textContent = '比較模式';
                         this.elements.compareToggle.setAttribute('aria-label', '比較模式');
                     } else {
                         this.elements.compareToggle.textContent = '✕ 關閉比較';
@@ -2361,7 +2382,7 @@
                 
                 this.elements.closeCompare.addEventListener('click', () => {
                     this.elements.comparePanel.classList.add('hidden');
-                    this.elements.compareToggle.textContent = '📊 比較模式';
+                    this.elements.compareToggle.textContent = '比較模式';
                 });
                 
                 this.elements.clearCompare.addEventListener('click', () => {
@@ -2418,13 +2439,13 @@
                 this.state.compareMode = true;
                 
                 this.elements.comparePanel.classList.add('hidden');
-                this.elements.compareToggle.textContent = '📊 比較模式';
+                this.elements.compareToggle.textContent = '比較模式';
                 
                 await this.loadCompareData(selectedVideos);
             },
             
             async loadCompareData(selectedVideos) {
-                console.log('🔍 載入比較數據:', selectedVideos);
+                console.log('載入比較數據:', selectedVideos);
                 
                 this.elements.compareResults.classList.remove('hidden');
                 this.elements.status.innerHTML = '<span class="loading"></span>載入比較數據中...';
@@ -2434,7 +2455,7 @@
                     const timeRange = this.elements.compareRange.value;
                     
                     for (const video of selectedVideos) {
-                        console.log(`📥 載入影片 ${video.name} (${video.id}) 的數據...`);
+                        console.log(`載入影片 ${video.name} (${video.id}) 的數據...`);
                         
                         try {
                             const response = await fetch(`/api/chart-data?videoId=${video.id}&range=${timeRange}&stats=true`);
@@ -2448,7 +2469,7 @@
                             let data;
                             if (Array.isArray(result)) {
                                 data = result;
-                            } else if (result.data) {
+                            } else if (result && result.data) {
                                 data = result.data;
                             } else {
                                 data = [];
@@ -2459,14 +2480,14 @@
                                 name: video.name,
                                 color: video.color,
                                 data: data,
-                                statistics: result.statistics || null,
-                                videoInfo: result.videoInfo || { name: video.name, color: video.color }
+                                statistics: (result && result.statistics) || null,
+                                videoInfo: (result && result.videoInfo) || { name: video.name, color: video.color }
                             };
                             
-                            console.log(`✅ 載入 ${video.name}: ${data.length} 條數據`);
+                            console.log(`載入 ${video.name}: ${data.length} 條數據`);
                             
                         } catch (error) {
-                            console.error(`❌ 載入影片 ${video.name} 失敗:`, error);
+                            console.error(`載入影片 ${video.name} 失敗:`, error);
                             compareData[video.id] = {
                                 id: video.id,
                                 name: video.name,
@@ -2480,11 +2501,11 @@
                     }
                     
                     this.updateCompareUI(compareData);
-                    this.elements.status.textContent = '✅ 比較數據載入完成';
+                    this.elements.status.textContent = '比較數據載入完成';
                     
                 } catch (error) {
-                    console.error('❌ 載入比較數據失敗:', error);
-                    this.elements.status.textContent = `❌ 載入比較數據失敗: ${error.message}`;
+                    console.error('載入比較數據失敗:', error);
+                    this.elements.status.textContent = `載入比較數據失敗: ${error.message}`;
                     this.showToast(`載入失敗: ${error.message}`, 'error');
                 }
             },
@@ -2525,17 +2546,17 @@
                     if (stats.hourlyChange > 0) {
                         changeClass = 'positive';
                         changeSymbol = '↑';
-                        changeText = `每小時 +${this.formatNumberWithCommas(stats.hourlyChange)}`;
+                        changeText = `每小時 +${formatNumberWithCommas(stats.hourlyChange)}`;
                     } else if (stats.hourlyChange < 0) {
                         changeClass = 'negative';
                         changeSymbol = '↓';
-                        changeText = `每小時 ${this.formatNumberWithCommas(stats.hourlyChange)}`;
+                        changeText = `每小時 ${formatNumberWithCommas(stats.hourlyChange)}`;
                     }
                     
                     card.innerHTML = `
                         <h4>${videoData.name}</h4>
                         <div class="compare-stat-value" style="color: ${videoData.color}">
-                            ${this.formatNumberWithCommas(stats.currentViews)}
+                            ${formatNumberWithCommas(stats.currentViews)}
                         </div>
                         <div class="compare-stat-change ${changeClass}">
                             ${changeSymbol} ${changeText}
@@ -2623,6 +2644,8 @@
                 let suggestedMin = Math.max(0, minValue - valueRange * 0.1);
                 let suggestedMax = maxValue + valueRange * 0.1;
                 
+                const self = this;
+                
                 this.state.compareChart = new Chart(ctx, {
                     type: 'line',
                     data: { datasets },
@@ -2658,10 +2681,10 @@
                                         let label = context.dataset.label || '';
                                         if (label) label += ': ';
                                         if (context.parsed.y !== null) {
-                                            label += this.formatNumberWithCommas(context.parsed.y);
+                                            label += formatNumberWithCommas(context.parsed.y);
                                         }
                                         return label;
-                                    }.bind(this)
+                                    }
                                 }
                             }
                         },
@@ -2680,13 +2703,13 @@
                             },
                             y: {
                                 type: 'linear',
-                                title: { display: true, text: '播放量' },
+                                title: { display: true, text: '播放次數' },
                                 suggestedMin,
                                 suggestedMax,
                                 ticks: {
                                     callback: function(value) {
-                                        return this.formatNumberWithCommas(value);
-                                    }.bind(this)
+                                        return formatNumberWithCommas(value);
+                                    }
                                 }
                             }
                         },
@@ -2696,7 +2719,7 @@
                         }
                     }
                 });
-            }.bind(this),
+            },
             
             getCommonTimePoints(compareData) {
                 const allTimestamps = new Set();
@@ -2772,7 +2795,7 @@
                         const closestData = this.findClosestTimestamp(videoData.data, timestamp);
                         
                         if (closestData) {
-                            dataCell.textContent = this.formatNumberWithCommas(closestData.viewCount);
+                            dataCell.textContent = formatNumberWithCommas(closestData.viewCount);
                             dataCell.style.color = videoData.color;
                             dataCell.style.fontWeight = '600';
                         } else {
@@ -2839,7 +2862,7 @@
             },
             
             convertArrayToCSV(dataArray, videoName, videoId) {
-                const headers = ['時間', '播放量', '影片名稱', '影片ID'];
+                const headers = ['時間', '播放次數', '影片名稱', '影片ID'];
                 const rows = dataArray.map(point => {
                     const date = new Date(point.x);
                     const formattedDate = date.toLocaleString('zh-TW');
@@ -2879,7 +2902,7 @@
                     const date = new Date(time);
                     const formattedDate = date.toLocaleString('zh-TW');
                     
-                    const row = [`"${formattedDate}"];
+                    const row = [`"${formattedDate}`];
                     
                     chartData.datasets.forEach(dataset => {
                         const point = dataset.data.find(p => p.x === time);
@@ -2908,59 +2931,15 @@
                 setTimeout(() => {
                     URL.revokeObjectURL(url);
                 }, 100);
-            }
-        };
-        
-        // ==================== 本地儲存管理 ====================
-        const StorageManager = {
-            get(key, defaultValue = null) {
-                try {
-                    const item = localStorage.getItem(key);
-                    if (item === null) return defaultValue;
-                    return JSON.parse(item);
-                } catch (error) {
-                    if (error.name === 'QuotaExceededError') {
-                        console.warn('本地儲存空間已滿');
-                    }
-                    return defaultValue;
-                }
             },
             
-            set(key, value) {
-                try {
-                    localStorage.setItem(key, JSON.stringify(value));
-                } catch (error) {
-                    console.error('儲存失敗:', error);
-                    // 嘗試清理後重試
-                    this.cleanExpiredData();
-                    try {
-                        localStorage.setItem(key, JSON.stringify(value));
-                    } catch (retryError) {
-                        console.error('重試儲存仍失敗:', retryError);
-                    }
-                }
-            },
-            
-            cleanExpiredData() {
-                // 清理過期資料的邏輯
-                const keys = ['videoOptions', 'selectedVideoId', 'autoRefreshEnabled', 'refreshInterval'];
-                const now = Date.now();
-                
-                keys.forEach(key => {
-                    try {
-                        const item = localStorage.getItem(key);
-                        if (item) {
-                            // 檢查是否存在舊格式資料需要清理
-                        }
-                    } catch (e) {
-                        // 忽略錯誤
-                    }
-                });
-            }
+            // Toast 方法的別名
+            showToast: showToast
         };
         
         // ==================== 初始化 ====================
         document.addEventListener('DOMContentLoaded', () => {
+            console.log('頁面載入完成，初始化 YouTubeTracker...');
             YouTubeTracker.init();
             
             // 更新下次刷新時間的定時器
@@ -2969,6 +2948,16 @@
                     YouTubeTracker.updateNextRefreshTime();
                 }
             }, 60000);
+        });
+        
+        // 全局錯誤處理
+        window.addEventListener('error', (event) => {
+            console.error('全域錯誤:', event.error);
+        });
+        
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error('未處理的 Promise 拒絕:', event.reason);
+            event.preventDefault();
         });
     </script>
 </body>
