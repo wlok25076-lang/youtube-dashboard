@@ -2519,7 +2519,6 @@ async function updateVideoInBackend(videoData) {
         });
 
         // ==================== 【新增】比較模式功能 ====================
-        let compareChart = null;
         let comparedVideos = [];
         let compareMode = false;
 
@@ -2826,12 +2825,12 @@ function setupCompareMode() {
 
         // 更新比較圖表
         function updateCompareChart(compareData) {
-            const ctx = document.getElementById('compareChart').getContext('2d');
-            
-            // 銷毀現有圖表
-            if (window.compareChart) {
-                window.compareChart.destroy();
-            }
+        const ctx = document.getElementById('compareChart').getContext('2d');
+
+         if (window.compareChart && typeof window.compareChart.destroy === 'function') {
+            window.compareChart.destroy();
+            window.compareChart = null;
+         }
             
             // 獲取共同的時間點
             const commonTimePoints = getCommonTimePoints(compareData);
