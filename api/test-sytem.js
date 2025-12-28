@@ -1,31 +1,55 @@
-// test-system.js
+// api/test-config.js
 const videosConfig = require('./videos-config');
 
-async function testSystem() {
-    console.log('🔍 測試系統配置...');
-    
+module.exports = async function handler(req, res) {
     try {
-        // 1. 測試配置模組
-        console.log('📋 測試配置讀取...');
-        const config = await videosConfig.getVideoConfig(true); // 強制刷新
+        console.log('🔍 開始測試系統配置...');
+        
+        // 強制刷新配置
+        const config = await videosConfig.getVideoConfig(true);
+        
         console.log('✅ 配置讀取成功');
-        console.log(`   - 追蹤影片數: ${config.ALL_VIDEO_IDS.length}`);
-        console.log(`   - 配置來源: ${config.source}`);
+        console.log(`追蹤影片數: ${config.ALL_VIDEO_IDS.length}`);
         
-        // 2. 列出所有影片
-        console.log('\n🎬 追蹤的影片:');
-        config.ALL_VIDEO_IDS.forEach((id, index) => {
-            const video = Object.values(config.TRACKED_VIDEOS)
-                .find(v => v.id === id);
-            console.log(`   ${index + 1}. ${video?.name || id} (${id})`);
-        });
+        const response = {
+            success: true,
+            system: {
+                status: 'operational',
+                timestamp: new Date().toISOString(),
+                environment: process.env.NODE_ENV || 'development'
+            },
+            config: {
+                totalVideos: config.ALL_VIDEO_IDS.length,
+                source: config.source,
+                videos: config.ALL_VIDEO_IDS.map(id => {
+                    const video = Object.values(config.TRACKED_VIDEOS).find(v => v.id === id);
+                    return {
+                        id,
+                        name: video?.name || 'Unknown',
+                        color: video?.color || '#0070f3',
+                        description: video?.description || ''
+                    };
+                })
+            },
+            environment: {
+                hasGistId: !!process.env.GIST_ID,
+                hasGithubToken: !!process.env.GITHUB_TOKEN,
+                hasYoutubeApiKey: !!process.env.YOUTUBE_API_KEY,
+                gistIdLength: process.env.GIST_ID?.length || 0
+            }
+        };
         
-        return true;
+        res.setHeader('Cache-Control', 'no-cache');
+        return res.status(200).json(response);
+        
     } catch (error) {
-        console.error('❌ 測試失敗:', error.message);
-        console.error('錯誤詳細信息:', error);
-        return false;
+        console.error('❌ 測試失敗:', error);
+        
+        return res.status(500).json({
+            success: false,
+            error: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+            timestamp: new Date().toISOString()
+        });
     }
-}
-
-testSystem();
+};
