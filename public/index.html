@@ -1661,6 +1661,9 @@ async function setupVideoSelector() {
             
             // 初始更新影片資訊
             updateVideoInfo();
+
+                // 【新增】返回成功標誌
+                return Promise.resolve();
         }
         
         // 更新影片選擇器選項
@@ -1690,22 +1693,36 @@ async function setupVideoSelector() {
             }
         }
         
-        // 更新比較模式選項
-        function updateCompareCheckboxes() {
-            const compareCheckboxes = document.getElementById('compareCheckboxes');
-            compareCheckboxes.innerHTML = '';
-            
-            videoOptions.forEach(video => {
-                const label = document.createElement('label');
-                label.className = 'compare-option';
-                label.innerHTML = `
-                    <input type="checkbox" name="compareVideo" value="${video.id}" data-color="${video.color}">
-                    <span class="color-dot" style="background-color: ${video.color};"></span>
-                    ${video.name}
-                `;
-                compareCheckboxes.appendChild(label);
-            });
-        }
+// 更新比較模式選項 - 確保在影片列表載入後調用
+function updateCompareCheckboxes() {
+    console.log('🔄 更新比較模式選項，影片數量:', videoOptions.length);
+    
+    const compareCheckboxes = document.getElementById('compareCheckboxes');
+    if (!compareCheckboxes) {
+        console.error('找不到比較模式容器');
+        return;
+    }
+    
+    compareCheckboxes.innerHTML = '';
+    
+    if (videoOptions.length === 0) {
+        compareCheckboxes.innerHTML = '<div style="color: #999; padding: 10px;">暫無影片可比較</div>';
+        return;
+    }
+    
+    videoOptions.forEach(video => {
+        const label = document.createElement('label');
+        label.className = 'compare-option';
+        label.innerHTML = `
+            <input type="checkbox" name="compareVideo" value="${video.id}" data-color="${video.color}">
+            <span class="color-dot" style="background-color: ${video.color};"></span>
+            ${video.name} (${video.id})
+        `;
+        compareCheckboxes.appendChild(label);
+    });
+    
+    console.log('✅ 比較模式選項更新完成');
+}
         
         // 更新影片資訊顯示
         function updateVideoInfo() {
@@ -2507,29 +2524,34 @@ async function updateVideoInBackend(videoData) {
         let compareMode = false;
 
         // 初始化比較模式
-        function setupCompareMode() {
-            const compareToggle = document.getElementById('compareToggle');
-            const closeCompareBtn = document.getElementById('closeCompare');
-            const applyCompareBtn = document.getElementById('applyCompare');
-            const clearCompareBtn = document.getElementById('clearCompare');
-            const closeCompareResultsBtn = document.getElementById('closeCompareResults');
-            const exportCompareBtn = document.getElementById('exportCompare');
-            const compareRangeSelect = document.getElementById('compareRange');
-            
-            if (!compareToggle) {
-                console.warn('比較模式按鈕未找到，跳過初始化');
-                return;
-            }
-            
-            // 更新比較選項
+function setupCompareMode() {
+    const compareToggle = document.getElementById('compareToggle');
+    const closeCompareBtn = document.getElementById('closeCompare');
+    const applyCompareBtn = document.getElementById('applyCompare');
+    const clearCompareBtn = document.getElementById('clearCompare');
+    const closeCompareResultsBtn = document.getElementById('closeCompareResults');
+    const exportCompareBtn = document.getElementById('exportCompare');
+    const compareRangeSelect = document.getElementById('compareRange');
+    
+    if (!compareToggle) {
+        console.warn('比較模式按鈕未找到，跳過初始化');
+        return;
+    }
+    
+    // 【重要】先更新比較選項
+    updateCompareCheckboxes();
+    
+    // 切換比較面板顯示
+    compareToggle.addEventListener('click', function() {
+        const comparePanel = document.getElementById('comparePanel');
+        comparePanel.classList.toggle('hidden');
+        this.textContent = comparePanel.classList.contains('hidden') ? '📊 比較模式' : '✕ 關閉比較';
+        
+        // 【新增】如果打開比較面板，確保選項是最新的
+        if (!comparePanel.classList.contains('hidden')) {
             updateCompareCheckboxes();
-            
-            // 切換比較面板顯示
-            compareToggle.addEventListener('click', function() {
-                const comparePanel = document.getElementById('comparePanel');
-                comparePanel.classList.toggle('hidden');
-                this.textContent = comparePanel.classList.contains('hidden') ? '📊 比較模式' : '✕ 關閉比較';
-            });
+        }
+    });
             
             // 關閉比較面板
             if (closeCompareBtn) {
@@ -3205,21 +3227,42 @@ async function updateVideoInBackend(videoData) {
             }, 100);
         }
         
-        // ==================== 【修改】初始化 ====================
-        document.addEventListener('DOMContentLoaded', function() {
-            setupVideoSelector(); // 初始化影片選擇器
-            setupVideoManagement(); // 【新增】初始化影片管理
-            setupAutoRefresh();
+// ==================== 【修改】初始化 ====================
+document.addEventListener('DOMContentLoaded', function() {
+    // 首先初始化影片選擇器和配置
+    setupVideoSelector().then(() => {
+        // 影片選擇器初始化完成後，再初始化其他組件
+        
+        // 【重要】確保影片列表已載入後，再初始化比較模式
+        setupVideoManagement(); // 初始化影片管理
+        setupAutoRefresh();     // 初始化自動刷新
+        
+        // 【關鍵修復】先載入影片列表，再初始化比較模式
+        console.log('初始化影片選擇器完成，載入影片列表...');
+        
+        // 等待一下確保影片列表已載入
+        setTimeout(() => {
+            // 現在才初始化比較模式
             setupCompareMode(); // 初始化比較模式
             setupExportFunction(); // 初始化導出功能
+            
+            // 載入圖表數據
             loadChartData();
             
-            setInterval(() => {
-                if (isAutoRefreshEnabled) {
-                    updateNextRefreshTime();
-                }
-            }, 60000);
-        });
+            console.log('所有組件初始化完成');
+        }, 500);
+    }).catch(error => {
+        console.error('初始化失敗:', error);
+        statusDiv.innerHTML = `❌ 初始化失敗: ${error.message}`;
+    });
+    
+    setInterval(() => {
+        if (isAutoRefreshEnabled) {
+            updateNextRefreshTime();
+        }
+    }, 60000);
+});
+
     </script>
 </body>
 </html>
