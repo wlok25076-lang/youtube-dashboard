@@ -1,376 +1,213 @@
-/**
- * 影片配置管理模組
- * 
- * 功能：
- * - 從 GitHub Gist 讀取/寫入影片配置
- * - 支援使用者自定義影片列表
- * - 向後兼容預設配置
- */
+// api/videos-config.js - 【修改為動態讀取】
+const GIST_ID = process.env.GIST_ID;
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
-const config = {
-    gistId: process.env.GIST_ID?.trim() || null,
-    githubToken: process.env.GITHUB_TOKEN?.trim() || null
-};
-
-// ==================== 預設影片配置 ====================
-
+// 預設的追蹤影片
 const DEFAULT_TRACKED_VIDEOS = {
     'main': {
         id: 'm2ANkjMRuXc',
         name: '純粹とは何か?',
-        description: '主要追蹤的 YouTube 影片',
+        description: '主要追蹤的YouTube影片',
         color: '#0070f3',
         startDate: '2024-01-01'
     },
     'biryani': {
         id: 'NReeTQ3YTAU',
         name: 'ビリヤニ',
-        description: 'ビリヤニ に関する YouTube 影片',
+        description: 'ビリヤニに関するYouTube影片',
         color: '#10b981',
         startDate: '2024-01-01'
     },
     'snowghost': {
         id: 'bobUT-j6PeQ',
         name: 'スノウゴースト',
-        description: 'スノウゴースト に関する YouTube 影片',
+        description: 'スノウゴーストに関するYouTube影片',
         color: '#f59e0b',
         startDate: '2024-01-01'
     }
 };
 
+// 獲取所有影片ID
 const DEFAULT_ALL_VIDEO_IDS = Object.values(DEFAULT_TRACKED_VIDEOS).map(v => v.id);
 
-// 配置檔案名稱
-const CONFIG_FILE_NAME = 'youtube-videos-config.json';
-
-// ==================== 工具函式 ====================
-
-/**
- * 安全解析 JSON
- */
-function safeJsonParse(str, fallback) {
-    if (!str || typeof str !== 'string') return fallback;
-    try {
-        return JSON.parse(str);
-    } catch (error) {
-        console.error('JSON 解析失敗:', error.message);
-        return fallback;
-    }
-}
-
-/**
- * HTTP 請求封裝
- */
-async function fetchGist(gistId, githubToken) {
-    if (!gistId || !githubToken) {
-        throw new Error('缺少 Gist 設定');
-    }
-
-    const url = `https://api.github.com/gists/${gistId}`;
-    const response = await fetch(url, {
-        headers: {
-            'Authorization': `token ${githubToken}`,
-            'User-Agent': 'YouTube-Multi-Tracker/2.0',
-            'Accept': 'application/vnd.github.v3+json'
-        }
-    });
-
-    if (!response.ok) {
-        throw new Error(`無法讀取 Gist: ${response.status}`);
-    }
-
-    return response.json();
-}
-
-/**
- * 更新 Gist
- */
-async function updateGist(gistId, githubToken, files, description) {
-    if (!gistId || !githubToken) {
-        throw new Error('缺少 Gist 設定');
-    }
-
-    const url = `https://api.github.com/gists/${gistId}`;
-    const response = await fetch(url, {
-        method: 'PATCH',
-        headers: {
-            'Authorization': `token ${githubToken}`,
-            'Content-Type': 'application/json',
-            'User-Agent': 'YouTube-Multi-Tracker/2.0',
-            'Accept': 'application/vnd.github.v3+json'
-        },
-        body: JSON.stringify({
-            description: description,
-            files: files
-        })
-    });
-
-    if (!response.ok) {
-        const errorText = await response.text().catch(() => '');
-        throw new Error(`更新 Gist 失敗: ${response.status} - ${errorText.substring(0, 100)}`);
-    }
-
-    return response.json();
-}
-
-/**
- * 驗證影片配置格式
- */
-function validateVideoConfig(config) {
-    if (!Array.isArray(config)) {
-        return { valid: false, error: '配置必須是陣列格式' };
-    }
-
-    for (let i = 0; i < config.length; i++) {
-        const video = config[i];
-        
-        if (!video.id || typeof video.id !== 'string') {
-            return { valid: false, error: `第 ${i + 1} 個影片缺少 id 欄位` };
-        }
-        
-        if (!/^[a-zA-Z0-9_-]{11}$/.test(video.id)) {
-            return { valid: false, error: `第 ${i + 1} 個影片 id 格式無效: ${video.id}` };
-        }
-        
-        if (!video.name || typeof video.name !== 'string') {
-            return { valid: false, error: `第 ${i + 1} 個影片缺少 name 欄位` };
-        }
-        
-        if (video.name.length > 100) {
-            return { valid: false, error: `第 ${i + 1} 個影片名稱過長` };
-        }
-    }
-
-    return { valid: true };
-}
-
-/**
- * 去除字串前後空白
- */
-function trimString(str) {
-    return typeof str === 'string' ? str.trim() : str;
-}
-
-// ==================== 配置管理 ====================
-
-/**
- * 快取配置
- */
-let configCache = {
-    data: null,
-    timestamp: 0,
-    ttl: 60000 // 1 分鐘快取
-};
-
-/**
- * 從 Gist 讀取使用者配置
- */
-async function loadUserConfig() {
-    try {
-        const gistData = await fetchGist(config.gistId, config.githubToken);
-        
-        if (!gistData.files || !gistData.files[CONFIG_FILE_NAME]) {
-            console.log('📭 沒有找到使用者配置，使用預設配置');
-            return null;
-        }
-
-        const content = gistData.files[CONFIG_FILE_NAME].content;
-        const userConfig = safeJsonParse(content);
-
-        if (!userConfig) {
-            console.warn('⚠️ 解析使用者配置失敗');
-            return null;
-        }
-
-        // 驗證配置格式
-        const validation = validateVideoConfig(userConfig);
-        if (!validation.valid) {
-            console.warn(`⚠️ 使用者配置驗證失敗: ${validation.error}`);
-            return null;
-        }
-
-        console.log(`✅ 成功載入使用者配置: ${userConfig.length} 個影片`);
-        return userConfig;
-
-    } catch (error) {
-        console.error('❌ 讀取使用者配置失敗:', error.message);
-        return null;
-    }
-}
-
-/**
- * 獲取影片配置（主要匯出函式）
- * 
- * @param {boolean} forceRefresh - 強制刷新快取
- * @returns {Promise<Object>} 影片配置物件
- */
-async function getVideoConfig(forceRefresh) {
-    forceRefresh = forceRefresh === true;
-    
-    const now = Date.now();
-    const cacheExpired = !configCache.data || (now - configCache.timestamp > configCache.ttl);
-
-    // 檢查快取
-    if (!forceRefresh && !cacheExpired) {
-        console.log('📦 使用快取的配置');
-        return configCache.data;
-    }
-
-    try {
-        // 嘗試載入使用者配置
-        const userConfig = await loadUserConfig();
-
-        if (userConfig && userConfig.length > 0) {
-            // 轉換為內部格式
-            const trackedVideos = {};
-            userConfig.forEach((video, index) => {
-                trackedVideos[`video_${index}`] = {
-                    id: video.id,
-                    name: trimString(video.name),
-                    description: trimString(video.description) || `${video.name} - YouTube 影片播放量追蹤`,
-                    color: trimString(video.color) || '#0070f3',
-                    startDate: video.startDate || new Date().toISOString().split('T')[0]
-                };
-            });
-
-            const allVideoIds = userConfig.map(v => v.id);
-
-            const result = {
-                TRACKED_VIDEOS: trackedVideos,
-                ALL_VIDEO_IDS: allVideoIds,
-                source: 'user'
-            };
-
-            // 更新快取
-            configCache = {
-                data: result,
-                timestamp: now
-            };
-
-            return result;
-        }
-
-        // 使用預設配置
-        const result = {
-            TRACKED_VIDEOS: DEFAULT_TRACKED_VIDEOS,
-            ALL_VIDEO_IDS: DEFAULT_ALL_VIDEO_IDS,
-            source: 'default'
-        };
-
-        // 更新快取
-        configCache = {
-            data: result,
-            timestamp: now
-        };
-
-        return result;
-
-    } catch (error) {
-        console.error('❌ 獲取配置失敗，使用預設值:', error.message);
-        
-        // 失敗時返回預設配置
+// 【新增】從Gist讀取使用者配置的影片列表
+async function getUserVideoConfig() {
+    if (!GIST_ID || !GITHUB_TOKEN) {
+        console.log('⚠️ 沒有GIST設定，使用預設配置');
         return {
             TRACKED_VIDEOS: DEFAULT_TRACKED_VIDEOS,
-            ALL_VIDEO_IDS: DEFAULT_ALL_VIDEO_IDS,
-            source: 'fallback'
+            ALL_VIDEO_IDS: DEFAULT_ALL_VIDEO_IDS
+        };
+    }
+
+    try {
+        // 讀取Gist中的影片配置
+        const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+            headers: {
+                'Authorization': `token ${GITHUB_TOKEN}`,
+                'User-Agent': 'vercel-app'
+            }
+        });
+
+        if (!response.ok) {
+            console.log(`⚠️ 無法讀取Gist: ${response.status}，使用預設配置`);
+            return {
+                TRACKED_VIDEOS: DEFAULT_TRACKED_VIDEOS,
+                ALL_VIDEO_IDS: DEFAULT_ALL_VIDEO_IDS
+            };
+        }
+
+        const gistData = await response.json();
+        const configFileName = 'youtube-videos-config.json';
+        
+        // 檢查是否有使用者配置檔案
+        if (gistData.files && gistData.files[configFileName] && gistData.files[configFileName].content) {
+            try {
+                const userConfig = JSON.parse(gistData.files[configFileName].content);
+                
+                // 驗證配置格式
+                if (Array.isArray(userConfig) && userConfig.length > 0) {
+                    // 轉換為與前端一致的格式
+                    const trackedVideos = {};
+                    userConfig.forEach((video, index) => {
+                        const key = `video_${index}`;
+                        trackedVideos[key] = {
+                            id: video.id,
+                            name: video.name,
+                            description: video.description || `${video.name} - YouTube影片播放量追蹤`,
+                            color: video.color || '#0070f3',
+                            startDate: video.startDate || new Date().toISOString().split('T')[0]
+                        };
+                    });
+                    
+                    const allVideoIds = userConfig.map(v => v.id);
+                    
+                    console.log(`✅ 成功載入使用者配置: ${allVideoIds.length} 個影片`);
+                    return {
+                        TRACKED_VIDEOS: trackedVideos,
+                        ALL_VIDEO_IDS: allVideoIds
+                    };
+                }
+            } catch (parseError) {
+                console.error('❌ 解析使用者配置失敗:', parseError.message);
+            }
+        }
+        
+        // 沒有找到有效的使用者配置，使用預設
+        console.log('📭 沒有找到使用者配置，使用預設配置');
+        return {
+            TRACKED_VIDEOS: DEFAULT_TRACKED_VIDEOS,
+            ALL_VIDEO_IDS: DEFAULT_ALL_VIDEO_IDS
+        };
+        
+    } catch (error) {
+        console.error('❌ 讀取使用者配置時發生錯誤:', error.message);
+        return {
+            TRACKED_VIDEOS: DEFAULT_TRACKED_VIDEOS,
+            ALL_VIDEO_IDS: DEFAULT_ALL_VIDEO_IDS
         };
     }
 }
 
-/**
- * 儲存影片配置到 Gist
- * 
- * @param {Array} videos - 影片物件陣列
- * @returns {Promise<boolean>} 是否成功
- */
-async function saveVideoConfig(videos) {
-    if (!config.gistId || !config.githubToken) {
-        console.error('❌ 無法儲存配置: 缺少 Gist 設定');
+// 【新增】寫入使用者配置到Gist
+async function saveUserVideoConfig(videos) {
+    if (!GIST_ID || !GITHUB_TOKEN) {
+        console.error('❌ 無法儲存配置: 缺少GIST設定');
         return false;
     }
 
     try {
-        // 驗證配置
-        const validation = validateVideoConfig(videos);
-        if (!validation.valid) {
-            console.error(`❌ 配置驗證失敗: ${validation.error}`);
+        // 先讀取現有Gist
+        const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+            headers: {
+                'Authorization': `token ${GITHUB_TOKEN}`,
+                'User-Agent': 'vercel-app'
+            }
+        });
+
+        if (!response.ok) {
+            console.error(`❌ 無法讀取Gist: ${response.status}`);
             return false;
         }
 
-        // 讀取現有 Gist
-        const gistData = await fetchGist(config.gistId, config.githubToken);
+        const gistData = await response.json();
         const filesToUpdate = { ...gistData.files };
-
-        // 準備配置資料
+        
+        // 準備影片配置
+        const configFileName = 'youtube-videos-config.json';
         const videosArray = videos.map(video => ({
-            id: trimString(video.id),
-            name: trimString(video.name),
-            description: trimString(video.description),
-            color: trimString(video.color) || '#0070f3',
+            id: video.id,
+            name: video.name,
+            description: video.description,
+            color: video.color,
             startDate: video.startDate || new Date().toISOString().split('T')[0]
         }));
-
+        
         // 更新或新增配置檔案
-        filesToUpdate[CONFIG_FILE_NAME] = {
+        filesToUpdate[configFileName] = {
             content: JSON.stringify(videosArray, null, 2)
         };
+        
+        // 更新Gist
+        const updateResponse = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `token ${GITHUB_TOKEN}`,
+                'Content-Type': 'application/json',
+                'User-Agent': 'vercel-app'
+            },
+            body: JSON.stringify({
+                description: `YouTube追蹤影片配置，最後更新: ${new Date().toISOString()}`,
+                files: filesToUpdate
+            })
+        });
 
-        // 更新 Gist
-        await updateGist(
-            config.gistId,
-            config.githubToken,
-            filesToUpdate,
-            `YouTube 追蹤影片配置 (${videos.length} 個影片)，更新: ${new Date().toISOString()}`
-        );
-
-        // 清除快取
-        configCache = {
-            data: null,
-            timestamp: 0
-        };
-
+        if (!updateResponse.ok) {
+            console.error(`❌ 更新Gist失敗: ${updateResponse.status}`);
+            return false;
+        }
+        
         console.log(`✅ 成功儲存影片配置: ${videos.length} 個影片`);
         return true;
-
+        
     } catch (error) {
-        console.error('❌ 儲存配置失敗:', error.message);
+        console.error('❌ 儲存配置時發生錯誤:', error);
         return false;
     }
 }
 
-/**
- * 根據影片 ID 獲取影片資訊
- */
-function getVideoById(id) {
-    return Object.values(configCache.data?.TRACKED_VIDEOS || DEFAULT_TRACKED_VIDEOS)
-        .find(v => v.id === id);
-}
+// 立即獲取配置（同步方式，但會警告）
+let currentConfig = {
+    TRACKED_VIDEOS: DEFAULT_TRACKED_VIDEOS,
+    ALL_VIDEO_IDS: DEFAULT_ALL_VIDEO_IDS
+};
 
-/**
- * 清除配置快取
- */
-function clearConfigCache() {
-    configCache = {
-        data: null,
-        timestamp: 0
-    };
-    console.log('🗑️ 配置快取已清除');
-}
-
-// ==================== 匯出 ====================
+// 異步初始化
+(async () => {
+    try {
+        const config = await getUserVideoConfig();
+        currentConfig = config;
+        console.log('✅ 影片配置初始化完成');
+    } catch (error) {
+        console.error('❌ 影片配置初始化失敗:', error.message);
+    }
+})();
 
 module.exports = {
-    // 影片配置獲取
-    getVideoConfig,
+    // 導出當前配置
+    get TRACKED_VIDEOS() { return currentConfig.TRACKED_VIDEOS; },
+    get ALL_VIDEO_IDS() { return currentConfig.ALL_VIDEO_IDS; },
     
-    // 影片配置儲存
-    saveVideoConfig,
+    // 導出函數
+    getUserVideoConfig,
+    saveUserVideoConfig,
     
-    // 輔助函式
-    getVideoById,
-    clearConfigCache,
+    // 輔助函數
+    getVideoById: (id) => {
+        return Object.values(currentConfig.TRACKED_VIDEOS).find(v => v.id === id);
+    },
     
-    // 預設配置
+    // 預設值（供其他檔案使用）
     DEFAULT_TRACKED_VIDEOS,
     DEFAULT_ALL_VIDEO_IDS
 };
