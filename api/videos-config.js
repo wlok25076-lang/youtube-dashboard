@@ -46,27 +46,16 @@ const CONFIG_FILE_NAME = 'youtube-videos-config.json';
 // ==================== 工具函式 ====================
 
 /**
- * 安全解析 JSON（支援字串和已解析物件）
+ * 安全解析 JSON
  */
-function safeJsonParse(input, fallback) {
-    if (!input) return fallback;
-    
-    // 如果已經是物件，直接返回
-    if (typeof input === 'object') {
-        return input;
+function safeJsonParse(str, fallback) {
+    if (!str || typeof str !== 'string') return fallback;
+    try {
+        return JSON.parse(str);
+    } catch (error) {
+        console.error('JSON 解析失敗:', error.message);
+        return fallback;
     }
-    
-    // 如果是字串，解析它
-    if (typeof input === 'string') {
-        try {
-            return JSON.parse(input);
-        } catch (error) {
-            console.error('JSON 解析失敗:', error.message);
-            return fallback;
-        }
-    }
-    
-    return fallback;
 }
 
 /**
@@ -181,7 +170,7 @@ async function loadUserConfig() {
         const gistData = await fetchGist(config.gistId, config.githubToken);
         
         if (!gistData.files || !gistData.files[CONFIG_FILE_NAME]) {
-            console.log('沒有找到使用者配置，使用預設配置');
+            console.log('📭 沒有找到使用者配置，使用預設配置');
             return null;
         }
 
@@ -189,22 +178,22 @@ async function loadUserConfig() {
         const userConfig = safeJsonParse(content);
 
         if (!userConfig) {
-            console.warn('解析使用者配置失敗');
+            console.warn('⚠️ 解析使用者配置失敗');
             return null;
         }
 
         // 驗證配置格式
         const validation = validateVideoConfig(userConfig);
         if (!validation.valid) {
-            console.warn(`使用者配置驗證失敗: ${validation.error}`);
+            console.warn(`⚠️ 使用者配置驗證失敗: ${validation.error}`);
             return null;
         }
 
-        console.log(`成功載入使用者配置: ${userConfig.length} 個影片`);
+        console.log(`✅ 成功載入使用者配置: ${userConfig.length} 個影片`);
         return userConfig;
 
     } catch (error) {
-        console.error('讀取使用者配置失敗:', error.message);
+        console.error('❌ 讀取使用者配置失敗:', error.message);
         return null;
     }
 }
@@ -223,7 +212,7 @@ async function getVideoConfig(forceRefresh) {
 
     // 檢查快取
     if (!forceRefresh && !cacheExpired) {
-        console.log('使用快取的配置');
+        console.log('📦 使用快取的配置');
         return configCache.data;
     }
 
@@ -277,7 +266,7 @@ async function getVideoConfig(forceRefresh) {
         return result;
 
     } catch (error) {
-        console.error('獲取配置失敗，使用預設值:', error.message);
+        console.error('❌ 獲取配置失敗，使用預設值:', error.message);
         
         // 失敗時返回預設配置
         return {
@@ -296,7 +285,7 @@ async function getVideoConfig(forceRefresh) {
  */
 async function saveVideoConfig(videos) {
     if (!config.gistId || !config.githubToken) {
-        console.error('無法儲存配置: 缺少 Gist 設定');
+        console.error('❌ 無法儲存配置: 缺少 Gist 設定');
         return false;
     }
 
@@ -304,7 +293,7 @@ async function saveVideoConfig(videos) {
         // 驗證配置
         const validation = validateVideoConfig(videos);
         if (!validation.valid) {
-            console.error(`配置驗證失敗: ${validation.error}`);
+            console.error(`❌ 配置驗證失敗: ${validation.error}`);
             return false;
         }
 
@@ -340,11 +329,11 @@ async function saveVideoConfig(videos) {
             timestamp: 0
         };
 
-        console.log(`成功儲存影片配置: ${videos.length} 個影片`);
+        console.log(`✅ 成功儲存影片配置: ${videos.length} 個影片`);
         return true;
 
     } catch (error) {
-        console.error('儲存配置失敗:', error.message);
+        console.error('❌ 儲存配置失敗:', error.message);
         return false;
     }
 }
@@ -365,7 +354,7 @@ function clearConfigCache() {
         data: null,
         timestamp: 0
     };
-    console.log('配置快取已清除');
+    console.log('🗑️ 配置快取已清除');
 }
 
 // ==================== 匯出 ====================

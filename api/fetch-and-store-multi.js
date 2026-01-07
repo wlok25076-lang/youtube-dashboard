@@ -39,26 +39,15 @@ function secureCompare(a, b) {
 }
 
 /**
- * 安全解析 JSON（支援字串和已解析物件）
+ * 安全解析 JSON
  */
-function safeJsonParse(input, fallback) {
-    if (!input) return fallback;
-    
-    // 如果已經是物件，直接返回
-    if (typeof input === 'object') {
-        return input;
+function safeJsonParse(str, fallback) {
+    if (!str || typeof str !== 'string') return fallback;
+    try {
+        return JSON.parse(str);
+    } catch {
+        return fallback;
     }
-    
-    // 如果是字串，解析它
-    if (typeof input === 'string') {
-        try {
-            return JSON.parse(input);
-        } catch {
-            return fallback;
-        }
-    }
-    
-    return fallback;
 }
 
 /**
@@ -81,7 +70,7 @@ async function fetchWithRetry(url, options, maxRetries = 3) {
             if (response.status >= 500) {
                 if (attempt < maxRetries) {
                     const waitTime = 1000 * Math.pow(2, attempt);
-                    console.warn(`伺服器錯誤 ${response.status}，${waitTime}ms 後重試 (${attempt}/${maxRetries})`);
+                    console.warn(`⚠️ 伺服器錯誤 ${response.status}，${waitTime}ms 後重試 (${attempt}/${maxRetries})`);
                     await delay(waitTime);
                     continue;
                 }
@@ -97,7 +86,7 @@ async function fetchWithRetry(url, options, maxRetries = 3) {
                 throw error;
             }
             const waitTime = 1000 * Math.pow(2, attempt);
-            console.warn(`請求失敗，${waitTime}ms 後重試 (${attempt}/${maxRetries}): ${error.message}`);
+            console.warn(`⚠️ 請求失敗，${waitTime}ms 後重試 (${attempt}/${maxRetries}): ${error.message}`);
             await delay(waitTime);
         }
     }
@@ -479,7 +468,7 @@ module.exports = async function handler(req, res) {
         // 優先處理影片管理操作
         const { action } = req.query;
         if (action === 'get' || action === 'add' || action === 'delete' || action === 'update') {
-            console.log(`[${requestId}] 處理影片管理操作: ${action}`);
+            console.log(`[${requestId}] 🎬 處理影片管理操作: ${action}`);
             return await handleVideoManagement(req, res);
         }
 
@@ -579,7 +568,7 @@ module.exports = async function handler(req, res) {
             await requestQueue.enqueue(async () => {
                 try {
                     const videoInfo = Object.values(TRACKED_VIDEOS).find(v => v.id === videoId);
-                    console.log(`[${requestId}] 處理影片: ${videoInfo?.name || videoId} (${videoId})`);
+                    console.log(`[${requestId}] 📹 處理影片: ${videoInfo?.name || videoId} (${videoId})`);
 
                     // 獲取 YouTube 統計
                     const stats = await fetchVideoStats(videoId, config.youtubeApiKey);
@@ -587,7 +576,7 @@ module.exports = async function handler(req, res) {
                     const currentDate = new Date(timestamp).toISOString().split('T')[0];
                     const currentHour = new Date(timestamp).getHours();
 
-                    console.log(`[${requestId}] ${videoInfo?.name || videoId}: ${stats.viewCount.toLocaleString()} 次觀看`);
+                    console.log(`[${requestId}] ✅ ${videoInfo?.name || videoId}: ${stats.viewCount.toLocaleString()} 次觀看`);
 
                     // 讀取現有數據
                     const fileName = `youtube-data-${videoId}.json`;
@@ -597,7 +586,7 @@ module.exports = async function handler(req, res) {
                         try {
                             currentData = safeJsonParse(filesToUpdate[fileName].content, []);
                             if (!Array.isArray(currentData)) {
-                                console.warn(`[${requestId}] ${fileName} 內容不是陣列`);
+                                console.warn(`[${requestId}] ⚠️ ${fileName} 內容不是陣列`);
                                 currentData = [];
                             }
                         } catch {
@@ -607,7 +596,7 @@ module.exports = async function handler(req, res) {
 
                     // 舊格式遷移
                     if (videoId === 'm2ANkjMRuXc' && currentData.length === 0 && filesToUpdate['youtube-data.json']?.content) {
-                        console.log(`[${requestId}] 遷移舊數據格式`);
+                        console.log(`[${requestId}] 🔄 遷移舊數據格式`);
                         const oldData = safeJsonParse(filesToUpdate['youtube-data.json'].content, []);
                         if (Array.isArray(oldData)) {
                             currentData = oldData.map(item => ({
@@ -655,7 +644,7 @@ module.exports = async function handler(req, res) {
                     });
 
                 } catch (error) {
-                    console.error(`[${requestId}] 處理影片 ${videoId} 失敗:`, error.message);
+                    console.error(`[${requestId}] ❌ 處理影片 ${videoId} 失敗:`, error.message);
                     results.push({
                         videoId,
                         success: false,
@@ -670,7 +659,7 @@ module.exports = async function handler(req, res) {
         }
 
         // 更新 Gist
-        console.log(`[${requestId}] 更新 Gist (${Object.keys(filesToUpdate).length} 個檔案)`);
+        console.log(`[${requestId}] 📤 更新 Gist (${Object.keys(filesToUpdate).length} 個檔案)`);
         
         await updateGist(
             config.gistId,
@@ -702,12 +691,12 @@ module.exports = async function handler(req, res) {
             data: results
         };
 
-        console.log(`[${requestId}] 完成，處理時間: ${processingTime}ms`);
+        console.log(`[${requestId}] ✅ 完成，處理時間: ${processingTime}ms`);
 
         return res.status(200).json(response);
 
     } catch (error) {
-        console.error(`[${requestId}] 處理失敗:`, error);
+        console.error(`[${requestId}] ❌ 處理失敗:`, error);
         
         return res.status(500).json({
             success: false,
