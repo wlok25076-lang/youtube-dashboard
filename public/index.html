@@ -1931,6 +1931,15 @@ async function updateVideoInBackend(videoData) {
                     document.getElementById('currentVideoDescription').textContent = videoInfo.description;
                     currentVideoColor = videoInfo.color;
                     updateChartColor(videoInfo.color);
+                    
+                    // 【新增】優先使用API返回的發佈日期
+                    if (videoInfo.publishDate) {
+                        // 儲存到全局變量，供 updateStatsCards 使用
+                        if (!window.lastAPIResponse) window.lastAPIResponse = {};
+                        if (!window.lastAPIResponse.videoInfo) window.lastAPIResponse.videoInfo = {};
+                        window.lastAPIResponse.videoInfo.publishDate = videoInfo.publishDate;
+                        console.log('✅ 使用API返回的發佈日期:', videoInfo.publishDate);
+                    }
                 }
                 
                 if (apiStats && apiStats.current) {
@@ -1982,21 +1991,38 @@ async function updateVideoInBackend(videoData) {
         function updateStatsFromAPI(statistics) {
             if (!statistics) return;
             
-                // 發佈日期
-                if (statistics.current && statistics.current.date) {
-                    const publishDate = statistics.current.date;
-                    const formattedDate = formatDate(publishDate);
+            // 【修改】發佈日期 - 優先使用全局變量中的API返回日期
+            let publishDateFound = false;
+            
+            // 先檢查全局變量中是否有API返回的發佈日期
+            if (window.lastAPIResponse && window.lastAPIResponse.videoInfo && window.lastAPIResponse.videoInfo.publishDate) {
+                const apiPublishDate = window.lastAPIResponse.videoInfo.publishDate;
+                if (apiPublishDate) {
+                    const formattedDate = formatDate(apiPublishDate);
                     document.getElementById('publishDate').textContent = formattedDate;
                     updateTrendElement('publishDateTrend', '影片發佈日期', 'neutral');
-                    
-                    // 儲存到全局變量，供 updateStatsCards 使用
-                    if (!window.lastAPIResponse) window.lastAPIResponse = {};
-                    if (!window.lastAPIResponse.videoInfo) window.lastAPIResponse.videoInfo = {};
-                    window.lastAPIResponse.videoInfo.publishDate = publishDate;
-                } else {
-                    document.getElementById('publishDate').textContent = '--';
-                    updateTrendElement('publishDateTrend', '無日期數據', 'neutral');
+                    publishDateFound = true;
+                    console.log('✅ updateStatsFromAPI: 使用API返回的發佈日期:', apiPublishDate);
                 }
+            }
+            
+            // 如果沒有API返回的日期，再檢查statistics中的日期
+            if (!publishDateFound && statistics.current && statistics.current.date) {
+                const publishDate = statistics.current.date;
+                const formattedDate = formatDate(publishDate);
+                document.getElementById('publishDate').textContent = formattedDate;
+                updateTrendElement('publishDateTrend', '影片發佈日期', 'neutral');
+                
+                // 儲存到全局變量，供 updateStatsCards 使用
+                if (!window.lastAPIResponse) window.lastAPIResponse = {};
+                if (!window.lastAPIResponse.videoInfo) window.lastAPIResponse.videoInfo = {};
+                window.lastAPIResponse.videoInfo.publishDate = publishDate;
+                console.log('ℹ️ updateStatsFromAPI: 使用statistics中的日期:', publishDate);
+            } else if (!publishDateFound) {
+                document.getElementById('publishDate').textContent = '--';
+                updateTrendElement('publishDateTrend', '等待API獲取', 'neutral');
+                console.log('⚠️ updateStatsFromAPI: 未找到發佈日期');
+            }
             
             // 當前播放量
             if (statistics.current && statistics.current.viewCount !== undefined) {
@@ -2170,7 +2196,7 @@ async function updateVideoInBackend(videoData) {
                     document.getElementById('publishDate').textContent = formattedDate;
                     updateTrendElement('publishDateTrend', '影片發佈日期', 'neutral');
                     publishDateFound = true;
-                    console.log('✅ 使用API返回的發佈日期:', apiPublishDate);
+                    console.log('✅ updateStatsCards: 使用API返回的發佈日期:', apiPublishDate);
                 }
             }
             
@@ -2184,7 +2210,7 @@ async function updateVideoInBackend(videoData) {
                     document.getElementById('publishDate').textContent = formattedDate;
                     updateTrendElement('publishDateTrend', '影片發佈日期', 'neutral');
                     publishDateFound = true;
-                    console.log('ℹ️ 使用本地配置的發佈日期:', currentVideo.publishDate);
+                    console.log('ℹ️ updateStatsCards: 使用本地配置的發佈日期:', currentVideo.publishDate);
                 }
             }
             
@@ -2192,7 +2218,7 @@ async function updateVideoInBackend(videoData) {
             if (!publishDateFound) {
                 document.getElementById('publishDate').textContent = '--';
                 updateTrendElement('publishDateTrend', '等待API獲取', 'neutral');
-                console.log('⚠️ 未找到發佈日期，等待API獲取');
+                console.log('⚠️ updateStatsCards: 未找到發佈日期，等待API獲取');
             }
             
             // 2. 當前播放量
