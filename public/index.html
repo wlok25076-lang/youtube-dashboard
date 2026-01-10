@@ -1264,6 +1264,7 @@
         let currentVideoColor = '#0070f3';
         let videoOptions = [];
         let selectedColor = '#0070f3';
+        let adminPassword = ''; // 【新增】保存驗證通過的管理密碼
         
         // ==================== 辅助函数 ====================
         function formatNumberWithCommas(num) {
@@ -1352,20 +1353,21 @@
                 this.disabled = true;
                 
                 try {
-                    const isValid = await verifyPassword(password);
-                    
-                    if (isValid) {
-                        hidePasswordDialog();
-                        // 密碼驗證成功，顯示管理面板
-                        document.getElementById('managePanel').classList.remove('hidden');
-                        document.getElementById('manageToggle').textContent = '✕ 關閉管理';
-                        loadVideoList();
-                    } else {
-                        passwordError.textContent = '密碼錯誤';
-                        passwordError.classList.remove('hidden');
-                        adminPasswordInput.value = '';
-                        adminPasswordInput.focus();
-                    }
+                const isValid = await verifyPassword(password);
+                
+                if (isValid) {
+                    adminPassword = password; // 【新增】保存驗證通過的密碼
+                    hidePasswordDialog();
+                    // 密碼驗證成功，顯示管理面板
+                    document.getElementById('managePanel').classList.remove('hidden');
+                    document.getElementById('manageToggle').textContent = '✕ 關閉管理';
+                    loadVideoList();
+                } else {
+                    passwordError.textContent = '密碼錯誤';
+                    passwordError.classList.remove('hidden');
+                    adminPasswordInput.value = '';
+                    adminPasswordInput.focus();
+                }
                 } finally {
                     // 恢復按鈕狀態
                     this.textContent = originalText;
@@ -1968,7 +1970,10 @@ async function addVideoToBackend(videoData) {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(videoData)
+            body: JSON.stringify({
+                ...videoData,
+                password: adminPassword // 【新增】包含密碼參數
+            })
         });
         
         const result = await response.json();
@@ -1994,7 +1999,10 @@ async function deleteVideoFromBackend(videoId) {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ id: videoId })
+            body: JSON.stringify({ 
+                id: videoId,
+                password: adminPassword // 【新增】包含密碼參數
+            })
         });
         
         const result = await response.json();
@@ -2020,7 +2028,10 @@ async function updateVideoInBackend(videoData) {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(videoData)
+            body: JSON.stringify({
+                ...videoData,
+                password: adminPassword // 【新增】包含密碼參數
+            })
         });
         
         const result = await response.json();
