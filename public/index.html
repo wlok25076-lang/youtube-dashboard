@@ -1123,6 +1123,11 @@
         <!-- 数据统计卡片 -->
         <div class="stats-grid" id="statsCards">
             <div class="stat-card">
+                <h3>📅 上載日期</h3>
+                <p class="value" id="uploadDate">--</p>
+                <div class="trend neutral" id="uploadDateTrend">影片資訊</div>
+            </div>
+            <div class="stat-card">
                 <h3>🎯 當前播放量</h3>
                 <p class="value" id="currentViews">--</p>
                 <div class="trend neutral" id="currentTrend">--</div>
@@ -1977,6 +1982,17 @@ async function updateVideoInBackend(videoData) {
         function updateStatsFromAPI(statistics) {
             if (!statistics) return;
             
+            // 上載日期
+            if (statistics.current && statistics.current.date) {
+                const uploadDate = statistics.current.date;
+                const formattedDate = formatDate(uploadDate);
+                document.getElementById('uploadDate').textContent = formattedDate;
+                updateTrendElement('uploadDateTrend', '影片上載日期', 'neutral');
+            } else {
+                document.getElementById('uploadDate').textContent = '--';
+                updateTrendElement('uploadDateTrend', '無日期數據', 'neutral');
+            }
+            
             // 當前播放量
             if (statistics.current && statistics.current.viewCount !== undefined) {
                 const currentViews = statistics.current.viewCount;
@@ -2067,6 +2083,21 @@ async function updateVideoInBackend(videoData) {
             }
         }
         
+        // 日期格式化函數
+        function formatDate(dateString) {
+            if (!dateString) return '--';
+            try {
+                const date = new Date(dateString);
+                return date.toLocaleDateString('zh-TW', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit'
+                });
+            } catch (error) {
+                return dateString;
+            }
+        }
+        
         // ==================== 數據處理函數 ====================
         function processChartData(data) {
             // 確保數據按時間戳記排序
@@ -2118,7 +2149,32 @@ async function updateVideoInBackend(videoData) {
             const sortedData = [...data].sort((a, b) => a.timestamp - b.timestamp);
             const currentData = sortedData[sortedData.length - 1];
             
-            // 1. 當前播放量
+            // 1. 上載日期（從影片配置獲取）
+            const videoSelect = document.getElementById('videoSelect');
+            const selectedOption = videoSelect.options[videoSelect.selectedIndex];
+            const videoId = selectedOption.value;
+            
+            // 嘗試從影片配置獲取上載日期
+            const videoOptions = JSON.parse(localStorage.getItem('videoList') || '[]');
+            const currentVideo = videoOptions.find(v => v.id === videoId);
+            
+            if (currentVideo && currentVideo.uploadDate) {
+                const formattedDate = formatDate(currentVideo.uploadDate);
+                document.getElementById('uploadDate').textContent = formattedDate;
+                updateTrendElement('uploadDateTrend', '影片上載日期', 'neutral');
+            } else {
+                // 如果沒有上載日期，顯示當前日期
+                const today = new Date();
+                const formattedDate = today.toLocaleDateString('zh-TW', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit'
+                });
+                document.getElementById('uploadDate').textContent = formattedDate;
+                updateTrendElement('uploadDateTrend', '當前日期', 'neutral');
+            }
+            
+            // 2. 當前播放量
             const currentViews = currentData.viewCount;
             document.getElementById('currentViews').textContent = formatNumberWithCommas(currentViews);
             
@@ -2141,7 +2197,37 @@ async function updateVideoInBackend(videoData) {
             }
             updateTrendElement('currentTrend', currentTrendText, currentTrend);
             
-            // 2. 今日增長
+            // 3. 當前Like數
+            if (currentData.likeCount !== undefined && currentData.likeCount !== null) {
+                const currentLikes = currentData.likeCount;
+                document.getElementById('currentLikes').textContent = formatNumberWithCommas(currentLikes);
+                
+                // Like數趨勢指示器
+                let likesTrend = 'neutral';
+                let likesTrendText = '最新數據';
+                
+                if (sortedData.length >= 2) {
+                    const prevData = sortedData[sortedData.length - 2];
+                    if (prevData.likeCount !== undefined && prevData.likeCount !== null) {
+                        const likeChange = currentLikes - prevData.likeCount;
+                        if (likeChange > 0) {
+                            likesTrend = 'positive';
+                            likesTrendText = `↑ 比上次 +${formatNumberWithCommas(likeChange)}`;
+                        } else if (likeChange < 0) {
+                            likesTrend = 'negative';
+                            likesTrendText = `↓ 比上次 ${formatNumberWithCommas(likeChange)}`;
+                        }
+                    }
+                }
+                
+                updateTrendElement('likesTrend', likesTrendText, likesTrend);
+            } else {
+                // 如果沒有like數據，顯示提示
+                document.getElementById('currentLikes').textContent = '--';
+                updateTrendElement('likesTrend', '無Like數據', 'neutral');
+            }
+            
+            // 4. 今日增長
             const today = new Date().toDateString();
             const todayData = sortedData.filter(item => 
                 new Date(item.timestamp).toDateString() === today
@@ -2175,7 +2261,7 @@ async function updateVideoInBackend(videoData) {
                 updateTrendElement('todayTrend', '數據不足', 'neutral');
             }
             
-            // 3. 平均每小時（最近24小時）
+            // 5. 平均每小時（最近24小時）
             const last24h = sortedData.filter(item => 
                 Date.now() - item.timestamp < 24 * 60 * 60 * 1000
             );
