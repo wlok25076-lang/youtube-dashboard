@@ -10,7 +10,7 @@ const DEFAULT_TRACKED_VIDEOS = {
         description: '主要追蹤的YouTube影片',
         color: '#0070f3',
         startDate: '2024-01-01',
-        uploadDate: '2024-01-01'
+        publishDate: '2024-01-01'
     },
     'biryani': {
         id: 'NReeTQ3YTAU',
@@ -18,7 +18,7 @@ const DEFAULT_TRACKED_VIDEOS = {
         description: 'ビリヤニに関するYouTube影片',
         color: '#10b981',
         startDate: '2024-01-01',
-        uploadDate: '2024-01-01'
+        publishDate: '2024-01-01'
     },
     'snowghost': {
         id: 'bobUT-j6PeQ',
@@ -26,7 +26,7 @@ const DEFAULT_TRACKED_VIDEOS = {
         description: 'スノウゴーストに関するYouTube影片',
         color: '#f59e0b',
         startDate: '2024-01-01',
-        uploadDate: '2024-01-01'
+        publishDate: '2024-01-01'
     }
 };
 
@@ -80,7 +80,7 @@ async function getUserVideoConfig() {
                             description: video.description || `${video.name} - YouTube影片播放量追蹤`,
                             color: video.color || '#0070f3',
                             startDate: video.startDate || new Date().toISOString().split('T')[0],
-                            uploadDate: video.uploadDate || video.startDate || new Date().toISOString().split('T')[0]
+                            publishDate: video.publishDate || video.startDate || new Date().toISOString().split('T')[0]
                         };
                     });
                     
@@ -145,7 +145,7 @@ async function saveUserVideoConfig(videos) {
             description: video.description,
             color: video.color,
             startDate: video.startDate || new Date().toISOString().split('T')[0],
-            uploadDate: video.uploadDate || video.startDate || new Date().toISOString().split('T')[0]
+            publishDate: video.publishDate || video.startDate || new Date().toISOString().split('T')[0]
         }));
         
         // 更新或新增配置檔案

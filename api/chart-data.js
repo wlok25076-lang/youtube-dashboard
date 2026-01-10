@@ -42,14 +42,14 @@ async function getVideoInfoFromYouTube(videoId) {
         }
         
         const snippet = data.items[0].snippet;
-        const uploadDate = snippet.publishedAt.split('T')[0]; // 格式: YYYY-MM-DD
+        const publishDate = snippet.publishedAt.split('T')[0]; // 格式: YYYY-MM-DD
         
-        console.log(`✅ 從YouTube獲取到上載日期: ${uploadDate}`);
+        console.log(`✅ 從YouTube獲取到發佈日期: ${publishDate}`);
         
         return {
             title: snippet.title,
             description: snippet.description,
-            uploadDate: uploadDate,
+            publishDate: publishDate,
             channelTitle: snippet.channelTitle,
             thumbnails: snippet.thumbnails
         };
@@ -348,16 +348,16 @@ if (YOUTUBE_API_KEY && /^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
             videoInfo.description = youtubeVideoInfo.description || videoInfo.description;
         }
         
-        // 【重要】總是使用YouTube API的上載日期
-        videoInfo.uploadDate = youtubeVideoInfo.uploadDate;
-        console.log(`✅ 使用YouTube API的上載日期: ${videoInfo.uploadDate}`);
+        // 【重要】總是使用YouTube API的發佈日期
+        videoInfo.publishDate = youtubeVideoInfo.publishDate;
+        console.log(`✅ 使用YouTube API的發佈日期: ${videoInfo.publishDate}`);
     }
 }
 
-// 如果沒有從YouTube獲取到上載日期，使用配置中的
-if (!videoInfo.uploadDate && videoInfo.uploadDate !== null) {
-    console.log(`⚠️ 無法從YouTube獲取上載日期，使用配置中的值: ${videoInfo.uploadDate || '無'}`);
-}
+        // 如果沒有從YouTube獲取到發佈日期，使用配置中的
+        if (!videoInfo.publishDate && videoInfo.publishDate !== null) {
+            console.log(`⚠️ 無法從YouTube獲取發佈日期，使用配置中的值: ${videoInfo.publishDate || '無'}`);
+        }
 
     // ========== 智能返回格式 ==========
     // 檢查是否有查詢參數
@@ -383,7 +383,7 @@ if (!videoInfo.uploadDate && videoInfo.uploadDate !== null) {
           name: videoInfo?.name || videoId,
           color: videoInfo?.color || '#0070f3',
           description: videoInfo?.description || `YouTube 影片: ${videoId}`,
-          uploadDate: videoInfo?.uploadDate || null,
+          publishDate: videoInfo?.publishDate || null,
           // 【新增】如果從YouTube獲取了資訊，添加額外字段
           ...(youtubeVideoInfo ? {
             youtubeTitle: youtubeVideoInfo.title,

@@ -193,12 +193,12 @@ export default async function handler(req, res) {
                 
                 const viewCount = parseInt(youtubeData.items[0].statistics.viewCount, 10);
                 const likeCount = youtubeData.items[0].statistics.likeCount ? parseInt(youtubeData.items[0].statistics.likeCount, 10) : 0;
-                const uploadDate = youtubeData.items[0].snippet.publishedAt;
+                const publishDate = youtubeData.items[0].snippet.publishedAt.split('T')[0];
                 const timestamp = Date.now();
                 const currentDate = new Date(timestamp).toISOString().split('T')[0];
                 const currentHour = new Date(timestamp).getHours();
                 
-                console.log(`   ✅ 獲取成功: ${viewCount.toLocaleString()} 次觀看, ${likeCount.toLocaleString()} 個讚 (${currentDate} ${currentHour}:00)`);
+                console.log(`   ✅ 獲取成功: ${viewCount.toLocaleString()} 次觀看, ${likeCount.toLocaleString()} 個讚 (${currentDate} ${currentHour}:00), 發佈日期: ${publishDate}`);
                 
                 // 4.2 讀取該影片的現有數據
                 const fileName = `youtube-data-${videoId}.json`;
@@ -420,8 +420,8 @@ async function handleVideoManagement(req, res) {
                 console.log('➕ 添加新影片...', body);
                 const { id, name, description, color } = body;
                 
-                // 獲取影片上載日期
-                let uploadDate = new Date().toISOString().split('T')[0];
+                // 獲取影片發佈日期
+                let publishDate = new Date().toISOString().split('T')[0];
                 if (YOUTUBE_API_KEY) {
                     try {
                         const youtubeUrl = `${YOUTUBE_API_BASE}?id=${id}&part=snippet&key=${YOUTUBE_API_KEY}`;
@@ -429,12 +429,12 @@ async function handleVideoManagement(req, res) {
                         if (response.ok) {
                             const data = await response.json();
                             if (data.items && data.items.length > 0) {
-                                uploadDate = data.items[0].snippet.publishedAt.split('T')[0];
-                                console.log(`   📅 獲取到上載日期: ${uploadDate}`);
+                                publishDate = data.items[0].snippet.publishedAt.split('T')[0];
+                                console.log(`   📅 獲取到發佈日期: ${publishDate}`);
                             }
                         }
                     } catch (error) {
-                        console.log(`   ⚠️ 無法獲取上載日期: ${error.message}`);
+                        console.log(`   ⚠️ 無法獲取發佈日期: ${error.message}`);
                     }
                 }
                 
@@ -482,7 +482,7 @@ async function handleVideoManagement(req, res) {
                     description: description || `${name} - YouTube影片播放量追蹤`,
                     color: color || '#0070f3',
                     startDate: new Date().toISOString().split('T')[0],
-                    uploadDate: uploadDate
+                    publishDate: publishDate
                 };
                 
                 videoList.push(newVideo);
