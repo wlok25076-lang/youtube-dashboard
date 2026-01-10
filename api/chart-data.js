@@ -1,6 +1,8 @@
 // api/chart-data.js - 【完整修改版】
 const GIST_ID = process.env.GIST_ID;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3/videos';
 
 // 【修改】導入影片配置函數
 import { 
@@ -13,6 +15,50 @@ import {
 // 預設值
 let TRACKED_VIDEOS = DEFAULT_TRACKED_VIDEOS;
 let ALL_VIDEO_IDS = DEFAULT_ALL_VIDEO_IDS;
+
+// 【新增】從YouTube API獲取影片資訊（包括上載日期）
+async function getVideoInfoFromYouTube(videoId) {
+    if (!YOUTUBE_API_KEY) {
+        console.warn('⚠️ 沒有YouTube API Key，無法獲取影片資訊');
+        return null;
+    }
+
+    try {
+        const youtubeUrl = `${YOUTUBE_API_BASE}?id=${videoId}&part=snippet&key=${YOUTUBE_API_KEY}`;
+        console.log(`🔍 從YouTube API獲取影片資訊: ${videoId}`);
+        
+        const response = await fetch(youtubeUrl);
+        
+        if (!response.ok) {
+            console.error(`❌ YouTube API錯誤: ${response.status}`);
+            return null;
+        }
+        
+        const data = await response.json();
+        
+        if (!data.items || data.items.length === 0) {
+            console.error(`❌ 影片未找到: ${videoId}`);
+            return null;
+        }
+        
+        const snippet = data.items[0].snippet;
+        const uploadDate = snippet.publishedAt.split('T')[0]; // 格式: YYYY-MM-DD
+        
+        console.log(`✅ 從YouTube獲取到上載日期: ${uploadDate}`);
+        
+        return {
+            title: snippet.title,
+            description: snippet.description,
+            uploadDate: uploadDate,
+            channelTitle: snippet.channelTitle,
+            thumbnails: snippet.thumbnails
+        };
+        
+    } catch (error) {
+        console.error(`❌ 獲取YouTube影片資訊失敗: ${error.message}`);
+        return null;
+    }
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -274,7 +320,8 @@ if (!videoInfo) {
       id: videoId,
       name: videoId,
       color: '#0070f3',
-      description: `YouTube 影片: ${videoId}`
+      description: `YouTube 影片: ${videoId}`,
+      uploadDate: null
     };
     
     // 【新增】如果是有效的YouTube ID格式，嘗試從YouTube獲取名稱
@@ -283,6 +330,33 @@ if (!videoInfo) {
       videoInfo.description = `YouTube影片播放量追蹤: ${videoId}`;
     }
   }
+}
+
+// 【新增】優先從YouTube API獲取上載日期
+let youtubeVideoInfo = null;
+if (YOUTUBE_API_KEY && /^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+    youtubeVideoInfo = await getVideoInfoFromYouTube(videoId);
+    
+    if (youtubeVideoInfo) {
+        // 更新影片名稱（如果配置中沒有或YouTube的標題更好）
+        if (!videoInfo.name || videoInfo.name === videoId || videoInfo.name.includes('YouTube影片')) {
+            videoInfo.name = youtubeVideoInfo.title || videoInfo.name;
+        }
+        
+        // 更新描述（如果配置中沒有）
+        if (!videoInfo.description || videoInfo.description.includes('YouTube影片')) {
+            videoInfo.description = youtubeVideoInfo.description || videoInfo.description;
+        }
+        
+        // 【重要】總是使用YouTube API的上載日期
+        videoInfo.uploadDate = youtubeVideoInfo.uploadDate;
+        console.log(`✅ 使用YouTube API的上載日期: ${videoInfo.uploadDate}`);
+    }
+}
+
+// 如果沒有從YouTube獲取到上載日期，使用配置中的
+if (!videoInfo.uploadDate && videoInfo.uploadDate !== null) {
+    console.log(`⚠️ 無法從YouTube獲取上載日期，使用配置中的值: ${videoInfo.uploadDate || '無'}`);
 }
 
     // ========== 智能返回格式 ==========
@@ -309,7 +383,13 @@ if (!videoInfo) {
           name: videoInfo?.name || videoId,
           color: videoInfo?.color || '#0070f3',
           description: videoInfo?.description || `YouTube 影片: ${videoId}`,
-          uploadDate: videoInfo?.uploadDate || null
+          uploadDate: videoInfo?.uploadDate || null,
+          // 【新增】如果從YouTube獲取了資訊，添加額外字段
+          ...(youtubeVideoInfo ? {
+            youtubeTitle: youtubeVideoInfo.title,
+            channelTitle: youtubeVideoInfo.channelTitle,
+            thumbnailUrl: youtubeVideoInfo.thumbnails?.default?.url
+          } : {})
         },
         meta: {
           requestedAt: new Date().toISOString(),
