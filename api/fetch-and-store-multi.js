@@ -25,8 +25,8 @@ export default async function handler(req, res) {
     // ==================== 【重要修改】優先處理影片管理操作 ====================
     const { action } = req.query;
     
-    // 如果是影片管理操作（add/delete/update/get），直接處理
-    if (action === 'get' || action === 'add' || action === 'delete' || action === 'update') {
+    // 如果是影片管理操作（add/delete/update/get/verify），直接處理
+    if (action === 'get' || action === 'add' || action === 'delete' || action === 'update' || action === 'verify') {
         console.log(`🎬 處理影片管理操作: ${action}`);
         return await handleVideoManagement(req, res);
     }
