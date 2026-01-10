@@ -9,21 +9,24 @@ const DEFAULT_TRACKED_VIDEOS = {
         name: '純粹とは何か?',
         description: '主要追蹤的YouTube影片',
         color: '#0070f3',
-        startDate: '2024-01-01'
+        startDate: '2024-01-01',
+        uploadDate: '2024-01-01'
     },
     'biryani': {
         id: 'NReeTQ3YTAU',
         name: 'ビリヤニ',
         description: 'ビリヤニに関するYouTube影片',
         color: '#10b981',
-        startDate: '2024-01-01'
+        startDate: '2024-01-01',
+        uploadDate: '2024-01-01'
     },
     'snowghost': {
         id: 'bobUT-j6PeQ',
         name: 'スノウゴースト',
         description: 'スノウゴーストに関するYouTube影片',
         color: '#f59e0b',
-        startDate: '2024-01-01'
+        startDate: '2024-01-01',
+        uploadDate: '2024-01-01'
     }
 };
 
@@ -76,7 +79,8 @@ async function getUserVideoConfig() {
                             name: video.name,
                             description: video.description || `${video.name} - YouTube影片播放量追蹤`,
                             color: video.color || '#0070f3',
-                            startDate: video.startDate || new Date().toISOString().split('T')[0]
+                            startDate: video.startDate || new Date().toISOString().split('T')[0],
+                            uploadDate: video.uploadDate || video.startDate || new Date().toISOString().split('T')[0]
                         };
                     });
                     
@@ -140,7 +144,8 @@ async function saveUserVideoConfig(videos) {
             name: video.name,
             description: video.description,
             color: video.color,
-            startDate: video.startDate || new Date().toISOString().split('T')[0]
+            startDate: video.startDate || new Date().toISOString().split('T')[0],
+            uploadDate: video.uploadDate || video.startDate || new Date().toISOString().split('T')[0]
         }));
         
         // 更新或新增配置檔案
@@ -193,21 +198,15 @@ let currentConfig = {
     }
 })();
 
-module.exports = {
+export {
     // 導出當前配置
-    get TRACKED_VIDEOS() { return currentConfig.TRACKED_VIDEOS; },
-    get ALL_VIDEO_IDS() { return currentConfig.ALL_VIDEO_IDS; },
-    
-    // 導出函數
     getUserVideoConfig,
     saveUserVideoConfig,
-    
-    // 輔助函數
-    getVideoById: (id) => {
-        return Object.values(currentConfig.TRACKED_VIDEOS).find(v => v.id === id);
-    },
-    
-    // 預設值（供其他檔案使用）
     DEFAULT_TRACKED_VIDEOS,
     DEFAULT_ALL_VIDEO_IDS
 };
+
+// 導出輔助函數
+export function getVideoById(id) {
+    return Object.values(DEFAULT_TRACKED_VIDEOS).find(v => v.id === id);
+}

@@ -160,9 +160,9 @@ export default async function handler(req, res) {
                 const videoInfo = Object.values(TRACKED_VIDEOS).find(v => v.id === videoId);
                 console.log(`\n📹 處理影片: ${videoInfo?.name || videoId} (${videoId})`);
                 
-                // 4.1 呼叫 YouTube API
-                const youtubeUrl = `${YOUTUBE_API_BASE}?id=${videoId}&part=statistics&key=${YOUTUBE_API_KEY}`;
-                console.log(`   🔍 呼叫 YouTube API...`);
+                // 4.1 呼叫 YouTube API - 修改為獲取 statistics 和 snippet
+                const youtubeUrl = `${YOUTUBE_API_BASE}?id=${videoId}&part=statistics,snippet&key=${YOUTUBE_API_KEY}`;
+                console.log(`   🔍 呼叫 YouTube API (statistics,snippet)...`);
                 
                 const youtubeResponse = await fetch(youtubeUrl);
                 
@@ -192,11 +192,13 @@ export default async function handler(req, res) {
                 }
                 
                 const viewCount = parseInt(youtubeData.items[0].statistics.viewCount, 10);
+                const likeCount = youtubeData.items[0].statistics.likeCount ? parseInt(youtubeData.items[0].statistics.likeCount, 10) : 0;
+                const uploadDate = youtubeData.items[0].snippet.publishedAt;
                 const timestamp = Date.now();
                 const currentDate = new Date(timestamp).toISOString().split('T')[0];
                 const currentHour = new Date(timestamp).getHours();
                 
-                console.log(`   ✅ 獲取成功: ${viewCount.toLocaleString()} 次觀看 (${currentDate} ${currentHour}:00)`);
+                console.log(`   ✅ 獲取成功: ${viewCount.toLocaleString()} 次觀看, ${likeCount.toLocaleString()} 個讚 (${currentDate} ${currentHour}:00)`);
                 
                 // 4.2 讀取該影片的現有數據
                 const fileName = `youtube-data-${videoId}.json`;
@@ -242,10 +244,11 @@ export default async function handler(req, res) {
                     }
                 }
                 
-                // 4.4 添加新記錄
+                // 4.4 添加新記錄 - 添加 likeCount 字段
                 const newEntry = { 
                     timestamp, 
                     viewCount, 
+                    likeCount,
                     date: currentDate,
                     hour: currentHour,
                     videoId,
@@ -253,7 +256,7 @@ export default async function handler(req, res) {
                 };
                 
                 currentData.push(newEntry);
-                console.log(`   📝 添加新記錄: ${currentDate} ${currentHour}:00 - ${viewCount.toLocaleString()} 次觀看`);
+                console.log(`   📝 添加新記錄: ${currentDate} ${currentHour}:00 - ${viewCount.toLocaleString()} 次觀看, ${likeCount.toLocaleString()} 個讚`);
                 
                 // 4.5 清理舊數據（保留最近30天）
                 const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
@@ -275,7 +278,9 @@ export default async function handler(req, res) {
                     videoId,
                     success: true,
                     viewCount,
+                    likeCount,
                     viewCountFormatted: viewCount.toLocaleString(),
+                    likeCountFormatted: likeCount.toLocaleString(),
                     totalEntries: currentData.length,
                     videoName: videoInfo?.name || videoId,
                     timestamp: new Date(timestamp).toISOString()
@@ -415,6 +420,24 @@ async function handleVideoManagement(req, res) {
                 console.log('➕ 添加新影片...', body);
                 const { id, name, description, color } = body;
                 
+                // 獲取影片上載日期
+                let uploadDate = new Date().toISOString().split('T')[0];
+                if (YOUTUBE_API_KEY) {
+                    try {
+                        const youtubeUrl = `${YOUTUBE_API_BASE}?id=${id}&part=snippet&key=${YOUTUBE_API_KEY}`;
+                        const response = await fetch(youtubeUrl);
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.items && data.items.length > 0) {
+                                uploadDate = data.items[0].snippet.publishedAt.split('T')[0];
+                                console.log(`   📅 獲取到上載日期: ${uploadDate}`);
+                            }
+                        }
+                    } catch (error) {
+                        console.log(`   ⚠️ 無法獲取上載日期: ${error.message}`);
+                    }
+                }
+                
                 if (!id || !name) {
                     console.error('❌ 缺少必要參數:', { id, name });
                     return res.status(400).json({
@@ -458,7 +481,8 @@ async function handleVideoManagement(req, res) {
                     name,
                     description: description || `${name} - YouTube影片播放量追蹤`,
                     color: color || '#0070f3',
-                    startDate: new Date().toISOString().split('T')[0]
+                    startDate: new Date().toISOString().split('T')[0],
+                    uploadDate: uploadDate
                 };
                 
                 videoList.push(newVideo);

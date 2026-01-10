@@ -3,12 +3,12 @@ const GIST_ID = process.env.GIST_ID;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
 // 【修改】導入影片配置函數
-const { 
+import { 
     getUserVideoConfig,
     getVideoById,
     DEFAULT_TRACKED_VIDEOS,
     DEFAULT_ALL_VIDEO_IDS 
-} = require('./videos-config');
+} from './videos-config.js';
 
 // 預設值
 let TRACKED_VIDEOS = DEFAULT_TRACKED_VIDEOS;
@@ -206,6 +206,11 @@ if (!ALL_VIDEO_IDS.includes(videoId)) {
         Date.now() - item.timestamp < 24 * 60 * 60 * 1000
       );
       
+      // 計算 likeCount 統計（如果數據中有 likeCount 字段）
+      const hasLikeCount = processedData.some(item => item.likeCount !== undefined);
+      const latestLikeCount = hasLikeCount ? latest.likeCount : null;
+      const earliestLikeCount = hasLikeCount ? earliest.likeCount : null;
+      
       statistics = {
         summary: {
           totalRecords: allData.length,
@@ -213,10 +218,12 @@ if (!ALL_VIDEO_IDS.includes(videoId)) {
           dateRange: {
             start: new Date(processedData[0].timestamp).toISOString(),
             end: new Date(processedData[processedData.length - 1].timestamp).toISOString()
-          }
+          },
+          hasLikeCount: hasLikeCount
         },
         current: {
           viewCount: latest.viewCount,
+          likeCount: latestLikeCount,
           timestamp: latest.timestamp,
           date: new Date(latest.timestamp).toISOString()
         },
@@ -230,16 +237,25 @@ if (!ALL_VIDEO_IDS.includes(videoId)) {
             : 0,
           avgHourlyChange: last24h.length > 1
             ? Math.round((last24h[last24h.length - 1].viewCount - last24h[0].viewCount) / (last24h.length - 1))
-            : 0
+            : 0,
+          // 添加 likeCount 變化統計
+          likeCountChange: hasLikeCount && processedData.length > 1 ? latestLikeCount - earliestLikeCount : null,
+          likeCountChangePercent: hasLikeCount && processedData.length > 1 && earliestLikeCount > 0 
+            ? ((latestLikeCount - earliestLikeCount) / earliestLikeCount * 100).toFixed(2)
+            : null
         },
         peaks: {
           maxViewCount: Math.max(...processedData.map(d => d.viewCount)),
           minViewCount: Math.min(...processedData.map(d => d.viewCount)),
-          avgViewCount: Math.round(processedData.reduce((sum, d) => sum + d.viewCount, 0) / processedData.length)
+          avgViewCount: Math.round(processedData.reduce((sum, d) => sum + d.viewCount, 0) / processedData.length),
+          // 添加 likeCount 峰值統計
+          maxLikeCount: hasLikeCount ? Math.max(...processedData.map(d => d.likeCount || 0)) : null,
+          minLikeCount: hasLikeCount ? Math.min(...processedData.map(d => d.likeCount || 0)) : null,
+          avgLikeCount: hasLikeCount ? Math.round(processedData.reduce((sum, d) => sum + (d.likeCount || 0), 0) / processedData.length) : null
         }
       };
       
-      console.log(`📊 統計信息計算完成`);
+      console.log(`📊 統計信息計算完成，包含Like數統計: ${hasLikeCount}`);
     }
 
 // ========== 【修改】獲取影片資訊 ==========
@@ -292,7 +308,8 @@ if (!videoInfo) {
           id: videoId,
           name: videoInfo?.name || videoId,
           color: videoInfo?.color || '#0070f3',
-          description: videoInfo?.description || `YouTube 影片: ${videoId}`
+          description: videoInfo?.description || `YouTube 影片: ${videoId}`,
+          uploadDate: videoInfo?.uploadDate || null
         },
         meta: {
           requestedAt: new Date().toISOString(),
@@ -300,7 +317,8 @@ if (!videoInfo) {
           params: { range, interval, stats, limit },
           originalCount: allData.length,
           returnedCount: processedData.length,
-          compatibility: 'new-format'
+          compatibility: 'new-format',
+          hasLikeCount: processedData.some(item => item.likeCount !== undefined)
         }
       };
 
