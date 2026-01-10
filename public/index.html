@@ -1998,6 +1998,41 @@ async function updateVideoInBackend(videoData) {
                 updateTrendElement('currentTrend', currentTrendText, currentTrend);
             }
             
+            // 當前Like數
+            if (statistics.current && statistics.current.likeCount !== undefined && statistics.current.likeCount !== null) {
+                const currentLikes = statistics.current.likeCount;
+                document.getElementById('currentLikes').textContent = formatNumberWithCommas(currentLikes);
+                
+                // Like數趨勢指示器
+                let likesTrend = 'neutral';
+                let likesTrendText = '最新數據';
+                
+                if (statistics.changes && statistics.changes.likeCountChange !== undefined && statistics.changes.likeCountChange !== null) {
+                    const likeChange = statistics.changes.likeCountChange;
+                    if (likeChange > 0) {
+                        likesTrend = 'positive';
+                        likesTrendText = `總增長 +${formatNumberWithCommas(likeChange)}`;
+                    } else if (likeChange < 0) {
+                        likesTrend = 'negative';
+                        likesTrendText = `總減少 ${formatNumberWithCommas(likeChange)}`;
+                    }
+                    
+                    // 如果有百分比變化，添加到趨勢文本
+                    if (statistics.changes.likeCountChangePercent !== undefined && statistics.changes.likeCountChangePercent !== null) {
+                        const likePercent = statistics.changes.likeCountChangePercent;
+                        if (likePercent !== 0) {
+                            likesTrendText += ` (${likeChange > 0 ? '+' : ''}${likePercent}%)`;
+                        }
+                    }
+                }
+                
+                updateTrendElement('likesTrend', likesTrendText, likesTrend);
+            } else {
+                // 如果沒有like數據，顯示提示
+                document.getElementById('currentLikes').textContent = '--';
+                updateTrendElement('likesTrend', '無Like數據', 'neutral');
+            }
+            
             // 今日增長
             if (statistics.changes && statistics.changes.todayChange !== undefined) {
                 const todayChange = statistics.changes.todayChange;
