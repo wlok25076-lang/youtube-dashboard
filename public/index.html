@@ -1152,12 +1152,14 @@
         <!-- 表格区域 -->
         <div id="dataTableContainer">
             <h2>📋 詳細數據</h2>
-            <table id="dataTable">
+                <table id="dataTable">
                 <thead>
                     <tr>
                         <th>日期時間</th>
                         <th>播放量</th>
                         <th>播放量變化</th>
+                        <th>Like數</th>
+                        <th>Like數變化</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -2073,8 +2075,14 @@ async function updateVideoInBackend(videoData) {
             // 準備表格數據
             const tableRows = sortedData.map((item, index) => {
                 let change = 0;
+                let likeChange = 0;
+                
                 if (index > 0) {
                     change = item.viewCount - sortedData[index - 1].viewCount;
+                    // 計算Like數變化（如果數據中有likeCount字段）
+                    if (item.likeCount !== undefined && sortedData[index - 1].likeCount !== undefined) {
+                        likeChange = item.likeCount - sortedData[index - 1].likeCount;
+                    }
                 }
                 
                 const dateObj = new Date(item.timestamp);
@@ -2091,6 +2099,8 @@ async function updateVideoInBackend(videoData) {
                     dateTime: formattedDateTime,
                     viewCount: item.viewCount,
                     change: change,
+                    likeCount: item.likeCount,
+                    likeCountChange: likeChange,
                     timestamp: item.timestamp
                 };
             });
@@ -2420,7 +2430,7 @@ async function updateVideoInBackend(videoData) {
                 const tdViewCount = document.createElement('td');
                 tdViewCount.textContent = formatNumberWithCommas(row.viewCount);
                 
-                // 變化量
+                // 播放量變化
                 const tdChange = document.createElement('td');
                 const changeText = row.change > 0 ? 
                     '+' + formatNumberWithCommas(row.change) : 
@@ -2435,9 +2445,40 @@ async function updateVideoInBackend(videoData) {
                     tdChange.classList.add('change-zero');
                 }
                 
+                // Like數
+                const tdLikeCount = document.createElement('td');
+                if (row.likeCount !== undefined && row.likeCount !== null) {
+                    tdLikeCount.textContent = formatNumberWithCommas(row.likeCount);
+                } else {
+                    tdLikeCount.textContent = '--';
+                    tdLikeCount.style.color = 'var(--secondary-color)';
+                }
+                
+                // Like數變化
+                const tdLikeChange = document.createElement('td');
+                if (row.likeCountChange !== undefined && row.likeCountChange !== null) {
+                    const likeChangeText = row.likeCountChange > 0 ? 
+                        '+' + formatNumberWithCommas(row.likeCountChange) : 
+                        formatNumberWithCommas(row.likeCountChange);
+                    tdLikeChange.textContent = likeChangeText;
+                    
+                    if (row.likeCountChange > 0) {
+                        tdLikeChange.classList.add('change-positive');
+                    } else if (row.likeCountChange < 0) {
+                        tdLikeChange.classList.add('change-negative');
+                    } else {
+                        tdLikeChange.classList.add('change-zero');
+                    }
+                } else {
+                    tdLikeChange.textContent = '--';
+                    tdLikeChange.style.color = 'var(--secondary-color)';
+                }
+                
                 tr.appendChild(tdDateTime);
                 tr.appendChild(tdViewCount);
                 tr.appendChild(tdChange);
+                tr.appendChild(tdLikeCount);
+                tr.appendChild(tdLikeChange);
                 
                 dataTableBody.appendChild(tr);
             });
@@ -2445,7 +2486,7 @@ async function updateVideoInBackend(videoData) {
             if (reversedRows.length > 50) {
                 const tr = document.createElement('tr');
                 const td = document.createElement('td');
-                td.colSpan = 3;
+                td.colSpan = 5; // 更新為5列
                 td.style.textAlign = 'center';
                 td.style.fontStyle = 'italic';
                 td.style.color = 'var(--secondary-color)';
