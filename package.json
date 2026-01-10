@@ -3,11 +3,19 @@
   "version": "1.0.0",
   "description": "A dashboard to track YouTube video views",
   "main": "index.js",
+  "type": "module",
   "scripts": {
-    "dev": "vercel dev"
+    "dev": "vercel dev",
+    "start": "node api/fetch-and-store-multi.js"
   },
-  "keywords": ["youtube", "dashboard", "vercel"],
+  "keywords": [
+    "youtube",
+    "dashboard",
+    "vercel"
+  ],
   "author": "Your Name",
   "license": "MIT",
-  "dependencies": {}
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  }
 }

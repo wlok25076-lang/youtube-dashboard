@@ -1,4 +1,6 @@
 // api/videos-config.js - 【修改為動態讀取】
+import fetch from 'node-fetch';
+
 const GIST_ID = process.env.GIST_ID;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 

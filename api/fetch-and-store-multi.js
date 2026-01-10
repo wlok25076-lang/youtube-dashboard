@@ -1,6 +1,7 @@
 // api/fetch-and-store-multi.js
-global.URL = require('url').URL;
-global.URLSearchParams = require('url').URLSearchParams;
+import { URL, URLSearchParams } from 'url';
+global.URL = URL;
+global.URLSearchParams = URLSearchParams;
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3/videos';
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const GIST_ID = process.env.GIST_ID;
@@ -8,13 +9,13 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const CRON_AUTH_TOKEN = process.env.CRON_AUTH_TOKEN;
 
 // 【修改】導入影片配置函數
-const { 
+import { 
     getUserVideoConfig, 
     saveUserVideoConfig,
     getVideoById,
     DEFAULT_TRACKED_VIDEOS,
     DEFAULT_ALL_VIDEO_IDS 
-} = require('./videos-config');
+} from './videos-config.js';
 
 // 【修改】影片配置 - 改為動態獲取
 let TRACKED_VIDEOS = DEFAULT_TRACKED_VIDEOS;
@@ -360,6 +361,12 @@ async function handleVideoManagement(req, res) {
     console.log(`🔄 處理影片管理: ${req.query.action}`);
     
     // ==================== 【新增】管理操作需要密碼驗證 ====================
+    // 對於 verify 動作，使用不同的驗證邏輯
+    if (req.query.action === 'verify') {
+        return handlePasswordVerification(req, res);
+    }
+    
+    // 對於其他管理操作，需要密碼驗證
     const providedPassword = req.query.password || req.body?.password;
     const adminPassword = process.env.ADMIN_PASSWORD;
     
@@ -675,7 +682,7 @@ async function handleVideoManagement(req, res) {
                 return res.status(400).json({
                     success: false,
                     error: '未知的操作類型',
-                    allowedActions: ['get', 'add', 'delete', 'update'],
+                    allowedActions: ['get', 'add', 'delete', 'update', 'verify'],
                     received: action
                 });
         }
@@ -686,6 +693,88 @@ async function handleVideoManagement(req, res) {
             error: '內部伺服器錯誤',
             message: error.message,
             stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+            timestamp: new Date().toISOString()
+        });
+    }
+}
+
+// ==================== 【新增】密碼驗證處理函數 ====================
+async function handlePasswordVerification(req, res) {
+    console.log('🔐 處理密碼驗證請求');
+    
+    // 檢查請求方法
+    if (req.method !== 'POST') {
+        console.error('❌ 密碼驗證需要POST方法');
+        return res.status(405).json({
+            success: false,
+            error: 'Method not allowed',
+            message: '密碼驗證需要使用POST方法'
+        });
+    }
+    
+    let body;
+    try {
+        // 解析請求體
+        if (typeof req.body === 'string') {
+            body = JSON.parse(req.body);
+        } else {
+            body = req.body || {};
+        }
+    } catch (e) {
+        console.error('❌ 解析請求體失敗:', e);
+        return res.status(400).json({
+            success: false,
+            error: 'Invalid JSON body',
+            message: '無法解析請求體'
+        });
+    }
+    
+    const { password } = body;
+    const adminPassword = process.env.ADMIN_PASSWORD;
+    
+    console.log('🔍 驗證密碼:', {
+        hasPassword: !!password,
+        passwordLength: password ? password.length : 0,
+        hasAdminPassword: !!adminPassword,
+        adminPasswordLength: adminPassword ? adminPassword.length : 0
+    });
+    
+    // 檢查管理密碼是否配置
+    if (!adminPassword) {
+        console.error('❌ 管理密碼未配置');
+        return res.status(500).json({
+            success: false,
+            error: '管理功能未配置',
+            message: '請聯繫管理員設置管理密碼'
+        });
+    }
+    
+    // 檢查是否提供了密碼
+    if (!password) {
+        console.error('❌ 未提供密碼');
+        return res.status(400).json({
+            success: false,
+            error: '密碼是必需的',
+            message: '請提供密碼'
+        });
+    }
+    
+    // 驗證密碼
+    const isValid = password === adminPassword;
+    
+    console.log(`🔐 密碼驗證結果: ${isValid ? '✅ 成功' : '❌ 失敗'}`);
+    
+    if (isValid) {
+        return res.status(200).json({
+            success: true,
+            message: '密碼驗證成功',
+            timestamp: new Date().toISOString()
+        });
+    } else {
+        return res.status(403).json({
+            success: false,
+            error: '密碼錯誤',
+            message: '提供的密碼不正確',
             timestamp: new Date().toISOString()
         });
     }
