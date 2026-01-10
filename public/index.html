@@ -1988,6 +1988,11 @@ async function updateVideoInBackend(videoData) {
                 const formattedDate = formatDate(uploadDate);
                 document.getElementById('uploadDate').textContent = formattedDate;
                 updateTrendElement('uploadDateTrend', '影片上載日期', 'neutral');
+                
+                // 儲存到全局變量，供 updateStatsCards 使用
+                if (!window.lastAPIResponse) window.lastAPIResponse = {};
+                if (!window.lastAPIResponse.videoInfo) window.lastAPIResponse.videoInfo = {};
+                window.lastAPIResponse.videoInfo.uploadDate = uploadDate;
             } else {
                 document.getElementById('uploadDate').textContent = '--';
                 updateTrendElement('uploadDateTrend', '無日期數據', 'neutral');
@@ -2149,29 +2154,45 @@ async function updateVideoInBackend(videoData) {
             const sortedData = [...data].sort((a, b) => a.timestamp - b.timestamp);
             const currentData = sortedData[sortedData.length - 1];
             
-            // 1. 上載日期（從影片配置獲取）
+            // 1. 上載日期（優先從API獲取，其次從影片配置獲取）
             const videoSelect = document.getElementById('videoSelect');
             const selectedOption = videoSelect.options[videoSelect.selectedIndex];
             const videoId = selectedOption.value;
             
-            // 嘗試從影片配置獲取上載日期
-            const videoOptions = JSON.parse(localStorage.getItem('videoList') || '[]');
-            const currentVideo = videoOptions.find(v => v.id === videoId);
+            // 先嘗試從API響應中獲取上載日期（如果有的話）
+            let uploadDateFound = false;
             
-            if (currentVideo && currentVideo.uploadDate) {
-                const formattedDate = formatDate(currentVideo.uploadDate);
-                document.getElementById('uploadDate').textContent = formattedDate;
-                updateTrendElement('uploadDateTrend', '影片上載日期', 'neutral');
-            } else {
-                // 如果沒有上載日期，顯示當前日期
-                const today = new Date();
-                const formattedDate = today.toLocaleDateString('zh-TW', {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit'
-                });
-                document.getElementById('uploadDate').textContent = formattedDate;
-                updateTrendElement('uploadDateTrend', '當前日期', 'neutral');
+            // 檢查是否有全局的API響應數據
+            if (window.lastAPIResponse && window.lastAPIResponse.videoInfo && window.lastAPIResponse.videoInfo.uploadDate) {
+                const apiUploadDate = window.lastAPIResponse.videoInfo.uploadDate;
+                if (apiUploadDate) {
+                    const formattedDate = formatDate(apiUploadDate);
+                    document.getElementById('uploadDate').textContent = formattedDate;
+                    updateTrendElement('uploadDateTrend', '影片上載日期', 'neutral');
+                    uploadDateFound = true;
+                    console.log('✅ 使用API返回的上載日期:', apiUploadDate);
+                }
+            }
+            
+            // 如果API沒有提供，嘗試從影片配置獲取
+            if (!uploadDateFound) {
+                const videoOptions = JSON.parse(localStorage.getItem('videoList') || '[]');
+                const currentVideo = videoOptions.find(v => v.id === videoId);
+                
+                if (currentVideo && currentVideo.uploadDate) {
+                    const formattedDate = formatDate(currentVideo.uploadDate);
+                    document.getElementById('uploadDate').textContent = formattedDate;
+                    updateTrendElement('uploadDateTrend', '影片上載日期', 'neutral');
+                    uploadDateFound = true;
+                    console.log('ℹ️ 使用本地配置的上載日期:', currentVideo.uploadDate);
+                }
+            }
+            
+            // 如果都沒有，顯示提示而不是當前日期
+            if (!uploadDateFound) {
+                document.getElementById('uploadDate').textContent = '--';
+                updateTrendElement('uploadDateTrend', '等待API獲取', 'neutral');
+                console.log('⚠️ 未找到上載日期，等待API獲取');
             }
             
             // 2. 當前播放量
