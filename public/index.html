@@ -3627,6 +3627,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // 【重要】確保影片列表已載入後，再初始化比較模式
         setupVideoManagement(); // 初始化影片管理
         setupAutoRefresh();     // 初始化自動刷新
+        setupPasswordVerification(); // 【新增】初始化密碼驗證
         
         // 【關鍵修復】先載入影片列表，再初始化比較模式
         console.log('初始化影片選擇器完成，載入影片列表...');
