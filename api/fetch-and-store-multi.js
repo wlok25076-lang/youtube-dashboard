@@ -360,40 +360,42 @@ export default async function handler(req, res) {
 async function handleVideoManagement(req, res) {
     console.log(`🔄 處理影片管理: ${req.query.action}`);
     
-    // ==================== 【新增】管理操作需要密碼驗證 ====================
+    // ==================== 【修改】管理操作需要密碼驗證 ====================
     // 對於 verify 動作，使用不同的驗證邏輯
     if (req.query.action === 'verify') {
         return handlePasswordVerification(req, res);
     }
     
-    // 對於其他管理操作，需要密碼驗證
-    const providedPassword = req.query.password || req.body?.password;
-    const adminPassword = process.env.ADMIN_PASSWORD;
-    
-    if (!adminPassword) {
-        console.error('❌ 管理功能未配置: ADMIN_PASSWORD 環境變數未設置');
-        return res.status(500).json({
-            success: false,
-            error: '管理功能未配置',
-            message: '請聯繫管理員設置管理密碼'
-        });
+    // 對於修改操作（add/delete/update）需要密碼驗證，get 可以公開訪問
+    if (['add', 'delete', 'update'].includes(req.query.action)) {
+        const providedPassword = req.query.password || req.body?.password;
+        const adminPassword = process.env.ADMIN_PASSWORD;
+        
+        if (!adminPassword) {
+            console.error('❌ 管理功能未配置: ADMIN_PASSWORD 環境變數未設置');
+            return res.status(500).json({
+                success: false,
+                error: '管理功能未配置',
+                message: '請聯繫管理員設置管理密碼'
+            });
+        }
+        
+        if (!providedPassword || providedPassword !== adminPassword) {
+            console.error('❌ 無權限訪問管理功能: 密碼錯誤或缺失', {
+                hasPassword: !!providedPassword,
+                passwordLength: providedPassword ? providedPassword.length : 0,
+                expectedLength: adminPassword.length
+            });
+            return res.status(403).json({
+                success: false,
+                error: '無權限訪問管理功能',
+                message: '需要有效的管理密碼',
+                hint: '請在請求中包含正確的密碼參數'
+            });
+        }
+        
+        console.log('✅ 管理密碼驗證通過');
     }
-    
-    if (!providedPassword || providedPassword !== adminPassword) {
-        console.error('❌ 無權限訪問管理功能: 密碼錯誤或缺失', {
-            hasPassword: !!providedPassword,
-            passwordLength: providedPassword ? providedPassword.length : 0,
-            expectedLength: adminPassword.length
-        });
-        return res.status(403).json({
-            success: false,
-            error: '無權限訪問管理功能',
-            message: '需要有效的管理密碼',
-            hint: '請在請求中包含正確的密碼參數'
-        });
-    }
-    
-    console.log('✅ 管理密碼驗證通過');
     // ==================== 密碼驗證結束 ====================
     
     // 檢查請求方法
