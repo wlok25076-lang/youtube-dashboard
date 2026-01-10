@@ -359,6 +359,36 @@ export default async function handler(req, res) {
 async function handleVideoManagement(req, res) {
     console.log(`🔄 處理影片管理: ${req.query.action}`);
     
+    // ==================== 【新增】管理操作需要密碼驗證 ====================
+    const providedPassword = req.query.password || req.body?.password;
+    const adminPassword = process.env.ADMIN_PASSWORD;
+    
+    if (!adminPassword) {
+        console.error('❌ 管理功能未配置: ADMIN_PASSWORD 環境變數未設置');
+        return res.status(500).json({
+            success: false,
+            error: '管理功能未配置',
+            message: '請聯繫管理員設置管理密碼'
+        });
+    }
+    
+    if (!providedPassword || providedPassword !== adminPassword) {
+        console.error('❌ 無權限訪問管理功能: 密碼錯誤或缺失', {
+            hasPassword: !!providedPassword,
+            passwordLength: providedPassword ? providedPassword.length : 0,
+            expectedLength: adminPassword.length
+        });
+        return res.status(403).json({
+            success: false,
+            error: '無權限訪問管理功能',
+            message: '需要有效的管理密碼',
+            hint: '請在請求中包含正確的密碼參數'
+        });
+    }
+    
+    console.log('✅ 管理密碼驗證通過');
+    // ==================== 密碼驗證結束 ====================
+    
     // 檢查請求方法
     if (req.method !== 'GET' && req.method !== 'POST') {
         return res.status(405).json({ 
