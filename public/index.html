@@ -1862,7 +1862,7 @@ async function updateVideoInBackend(videoData) {
             
             try {
                 // 添加 videoId 參數到 API 請求
-                const apiUrl = `/api/chart-data?videoId=${currentVideoId}`;
+                const apiUrl = `/api/chart-data?videoId=${currentVideoId}&stats=true`;
                 const response = await fetch(apiUrl);
                 
                 if (!response.ok) {
