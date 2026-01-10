@@ -332,27 +332,20 @@ if (!videoInfo) {
   }
 }
 
-// 【新增】優先從YouTube API獲取上載日期
-let youtubeVideoInfo = null;
-if (YOUTUBE_API_KEY && /^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
-    youtubeVideoInfo = await getVideoInfoFromYouTube(videoId);
-    
-    if (youtubeVideoInfo) {
-        // 更新影片名稱（如果配置中沒有或YouTube的標題更好）
-        if (!videoInfo.name || videoInfo.name === videoId || videoInfo.name.includes('YouTube影片')) {
-            videoInfo.name = youtubeVideoInfo.title || videoInfo.name;
+        // 【新增】優先從YouTube API獲取上載日期
+        let youtubeVideoInfo = null;
+        if (YOUTUBE_API_KEY && /^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+            youtubeVideoInfo = await getVideoInfoFromYouTube(videoId);
+            
+            if (youtubeVideoInfo) {
+                // 【修改】只使用YouTube API的發佈日期，保留配置中的名稱和描述
+                // 不更新影片名稱和描述，保持配置中的簡潔版本
+                
+                // 【重要】總是使用YouTube API的發佈日期
+                videoInfo.publishDate = youtubeVideoInfo.publishDate;
+                console.log(`✅ 使用YouTube API的發佈日期: ${videoInfo.publishDate}`);
+            }
         }
-        
-        // 更新描述（如果配置中沒有）
-        if (!videoInfo.description || videoInfo.description.includes('YouTube影片')) {
-            videoInfo.description = youtubeVideoInfo.description || videoInfo.description;
-        }
-        
-        // 【重要】總是使用YouTube API的發佈日期
-        videoInfo.publishDate = youtubeVideoInfo.publishDate;
-        console.log(`✅ 使用YouTube API的發佈日期: ${videoInfo.publishDate}`);
-    }
-}
 
         // 如果沒有從YouTube獲取到發佈日期，使用配置中的
         if (!videoInfo.publishDate && videoInfo.publishDate !== null) {
