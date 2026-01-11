@@ -1266,6 +1266,11 @@
         let selectedColor = '#0070f3';
         let adminPassword = ''; // 【新增】保存驗證通過的管理密碼
         
+        // 【新增】分頁載入變數
+        let currentDisplayLimit = 50; // 初始顯示50筆記錄
+        let allTableRows = []; // 儲存所有數據
+        let loadMoreButton = null; // 載入更多按鈕
+        
         // ==================== 辅助函数 ====================
         function formatNumberWithCommas(num) {
             if (typeof num !== 'number' || isNaN(num)) return '--';
@@ -2057,7 +2062,7 @@ async function updateVideoInBackend(videoData) {
             document.querySelector('#refreshButton .button-text').textContent = '載入中...';
             
             try {
-                // 添加 videoId 參數到 API 請求
+                // 添加 videoId 參數到 API 請求，移除limit限制以獲取完整數據
                 const apiUrl = `/api/chart-data?videoId=${currentVideoId}&stats=true`;
                 const response = await fetch(apiUrl);
                 
@@ -2112,7 +2117,10 @@ async function updateVideoInBackend(videoData) {
                 
                 // 更新所有組件
                 updateChart(processedData.sortedData);
-                updateTable(processedData.tableRows);
+                
+                // 【修改】儲存所有表格數據，並更新表格顯示
+                allTableRows = processedData.tableRows;
+                updateTableWithPagination();
                 
                 // 優先使用API提供的影片資訊和統計信息
                 if (videoInfo) {
@@ -2167,7 +2175,7 @@ async function updateVideoInBackend(videoData) {
                 updateTrendElement('hourlyTrend', '連接失敗', 'negative');
                 
                 // 清空表格
-                dataTableBody.innerHTML = '<tr><td colspan="3">加載數據失敗，請稍後重試</td></tr>';
+                dataTableBody.innerHTML = '<tr><td colspan="5">加載數據失敗，請稍後重試</td></tr>';
                 
             } finally {
                 // 恢復按鈕狀態
@@ -2730,16 +2738,16 @@ async function updateVideoInBackend(videoData) {
             });
         }
         
-        // ==================== 表格功能 ====================
-        function updateTable(tableRows) {
+        // ==================== 【新增】分頁表格功能 ====================
+        function updateTableWithPagination() {
             // 清空表格
             dataTableBody.innerHTML = '';
             
             // 反轉順序，讓最新的在最上面
-            const reversedRows = [...tableRows].reverse();
+            const reversedRows = [...allTableRows].reverse();
             
-            // 只顯示最近50筆記錄
-            const displayRows = reversedRows.slice(0, 50);
+            // 只顯示當前限制的記錄數
+            const displayRows = reversedRows.slice(0, currentDisplayLimit);
             
             displayRows.forEach(row => {
                 const tr = document.createElement('tr');
@@ -2805,16 +2813,73 @@ async function updateVideoInBackend(videoData) {
                 dataTableBody.appendChild(tr);
             });
             
-            if (reversedRows.length > 50) {
-                const tr = document.createElement('tr');
-                const td = document.createElement('td');
-                td.colSpan = 5; // 更新為5列
-                td.style.textAlign = 'center';
-                td.style.fontStyle = 'italic';
-                td.style.color = 'var(--secondary-color)';
-                td.textContent = `... 僅顯示最近50筆記錄，共 ${reversedRows.length} 筆`;
-                tr.appendChild(td);
-                dataTableBody.appendChild(tr);
+            // 【新增】添加載入更多按鈕和顯示狀態
+            updateTableFooter();
+        }
+        
+        // 【新增】更新表格底部（載入更多按鈕和顯示狀態）
+        function updateTableFooter() {
+            // 移除現有的載入更多按鈕
+            const existingButton = document.querySelector('#loadMoreButton');
+            if (existingButton) {
+                existingButton.remove();
+            }
+            
+            const reversedRows = [...allTableRows].reverse();
+            
+            // 如果還有更多記錄可以載入，添加載入更多按鈕
+            if (currentDisplayLimit < reversedRows.length) {
+                const remaining = reversedRows.length - currentDisplayLimit;
+                const loadMoreCount = Math.min(50, remaining);
+                
+                const loadMoreRow = document.createElement('tr');
+                const loadMoreCell = document.createElement('td');
+                loadMoreCell.colSpan = 5;
+                loadMoreCell.style.textAlign = 'center';
+                loadMoreCell.style.padding = '15px';
+                
+                loadMoreButton = document.createElement('button');
+                loadMoreButton.id = 'loadMoreButton';
+                loadMoreButton.textContent = `載入更多 ${loadMoreCount} 筆記錄 (共 ${reversedRows.length} 筆)`;
+                loadMoreButton.style.padding = '10px 20px';
+                loadMoreButton.style.backgroundColor = 'var(--primary-color)';
+                loadMoreButton.style.color = 'white';
+                loadMoreButton.style.border = 'none';
+                loadMoreButton.style.borderRadius = '6px';
+                loadMoreButton.style.cursor = 'pointer';
+                loadMoreButton.style.fontWeight = '600';
+                loadMoreButton.style.transition = 'all 0.2s';
+                
+                loadMoreButton.addEventListener('click', function() {
+                    currentDisplayLimit += 50;
+                    updateTableWithPagination();
+                });
+                
+                loadMoreButton.addEventListener('mouseenter', function() {
+                    this.style.backgroundColor = '#0051cc';
+                    this.style.transform = 'translateY(-1px)';
+                });
+                
+                loadMoreButton.addEventListener('mouseleave', function() {
+                    this.style.backgroundColor = 'var(--primary-color)';
+                    this.style.transform = 'translateY(0)';
+                });
+                
+                loadMoreCell.appendChild(loadMoreButton);
+                loadMoreRow.appendChild(loadMoreCell);
+                dataTableBody.appendChild(loadMoreRow);
+            } else if (reversedRows.length > 0) {
+                // 顯示所有記錄已載入
+                const infoRow = document.createElement('tr');
+                const infoCell = document.createElement('td');
+                infoCell.colSpan = 5;
+                infoCell.style.textAlign = 'center';
+                infoCell.style.fontStyle = 'italic';
+                infoCell.style.color = 'var(--secondary-color)';
+                infoCell.style.padding = '15px';
+                infoCell.textContent = `已顯示所有 ${reversedRows.length} 筆記錄`;
+                infoRow.appendChild(infoCell);
+                dataTableBody.appendChild(infoRow);
             }
         }
         
