@@ -3560,7 +3560,7 @@ function setupCompareMode() {
 
         // 導出當前影片數據
         function exportCurrentVideoData() {
-            if (!chart || !chart.data || chart.data.datasets.length === 0) {
+            if (allTableRows.length === 0) {
                 alert('沒有可導出的數據');
                 return;
             }
@@ -3568,9 +3568,8 @@ function setupCompareMode() {
             const videoName = document.getElementById('currentVideoName').textContent;
             const videoId = currentVideoId;
             
-            // 從圖表數據創建CSV
-            const chartData = chart.data.datasets[0].data;
-            const csvData = convertArrayToCSV(chartData, videoName, videoId);
+            // 從完整數據創建CSV
+            const csvData = convertArrayToCSV(allTableRows, videoName, videoId);
             
             // 下載
             const filename = `youtube-tracker-${videoId}-${new Date().toISOString().split('T')[0]}.csv`;
@@ -3600,17 +3599,17 @@ function setupCompareMode() {
 
         // 將數組轉換為CSV
         function convertArrayToCSV(dataArray, videoName, videoId) {
-            const headers = ['時間', '播放量', '影片名稱', '影片ID'];
-            const rows = dataArray.map(point => {
-                const date = new Date(point.x);
-                const timestamp = date.toISOString();
+            const headers = ['影片名稱', '影片ID', '時間', '播放量', 'Like數'];
+            const rows = dataArray.map(row => {
+                const date = new Date(row.timestamp);
                 const formattedDate = date.toLocaleString('zh-TW');
                 
                 return [
-                    `"${formattedDate}"`,
-                    point.y,
                     `"${videoName}"`,
-                    `"${videoId}"`
+                    `"${videoId}"`,
+                    `"${formattedDate}"`,
+                    row.viewCount,
+                    row.likeCount !== undefined && row.likeCount !== null ? row.likeCount : ''
                 ];
             });
             
