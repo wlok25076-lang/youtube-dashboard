@@ -243,9 +243,18 @@ if (!ALL_VIDEO_IDS.includes(videoId)) {
       const latest = processedData[processedData.length - 1];
       const earliest = processedData[0];
       
-      const today = new Date().toDateString();
+      // 【修改】使用香港時間 (UTC+8) 計算今日數據
+      function getHongKongDate(date = new Date()) {
+        const utc = date.getTime() + (date.getTimezoneOffset() * 60000);
+        return new Date(utc + (8 * 3600000)); // UTC+8
+      }
+      
+      const today = getHongKongDate();
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+      const todayEnd = todayStart + 24 * 60 * 60 * 1000;
+      
       const todayData = processedData.filter(item => 
-        new Date(item.timestamp).toDateString() === today
+        item.timestamp >= todayStart && item.timestamp < todayEnd
       );
       
       const last24h = processedData.filter(item => 
