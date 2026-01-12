@@ -244,17 +244,24 @@ if (!ALL_VIDEO_IDS.includes(videoId)) {
       const earliest = processedData[0];
       
       // 【修改】使用香港時間 (UTC+8) 計算今日數據
-      function getHongKongDate(date = new Date()) {
-        const utc = date.getTime() + (date.getTimezoneOffset() * 60000);
-        return new Date(utc + (8 * 3600000)); // UTC+8
+      // 注意：timestamp 是 UTC 時間戳，需要將香港時間轉換為 UTC 時間戳來匹配
+      function getHongKongTodayRange() {
+        const now = new Date();
+        // 獲取香港時間的今天日期
+        const hkNow = new Date(now.getTime() + (8 * 3600000));
+        const hkToday = new Date(hkNow.getFullYear(), hkNow.getMonth(), hkNow.getDate());
+        
+        // 香港時間今天 00:00 = UTC 時間 (hkToday - 8小時)
+        const todayStartUTC = hkToday.getTime() - (8 * 3600000);
+        const todayEndUTC = todayStartUTC + 24 * 60 * 60 * 1000;
+        
+        return { todayStartUTC, todayEndUTC };
       }
       
-      const today = getHongKongDate();
-      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-      const todayEnd = todayStart + 24 * 60 * 60 * 1000;
+      const { todayStartUTC, todayEndUTC } = getHongKongTodayRange();
       
       const todayData = processedData.filter(item => 
-        item.timestamp >= todayStart && item.timestamp < todayEnd
+        item.timestamp >= todayStartUTC && item.timestamp < todayEndUTC
       );
       
       const last24h = processedData.filter(item => 
