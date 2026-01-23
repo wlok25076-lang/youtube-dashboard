@@ -21,6 +21,184 @@ import {
 let TRACKED_VIDEOS = DEFAULT_TRACKED_VIDEOS;
 let ALL_VIDEO_IDS = DEFAULT_ALL_VIDEO_IDS;
 
+// ==================== 【新增】批量查詢功能 ====================
+
+/**
+ * 批量查詢 YouTube 影片數據
+ * @param {string[]} videoIds - 影片 ID 陣列
+ * @param {number} batchSize - 每批次的影片數量（預設 50）
+ * @returns {Map<string, Object>} - 結果 Map，key 為 videoId
+ */
+async function batchFetchVideos(videoIds, batchSize = 50) {
+    console.log(`\n📡 開始批量查詢 ${videoIds.length} 個影片 (每批 ${batchSize})...`);
+    
+    const results = new Map();
+    const startTime = Date.now();
+    
+    // 去重複
+    const uniqueIds = [...new Set(videoIds)];
+    console.log(`📊 去重複後: ${uniqueIds.length} 個唯一影片ID`);
+    
+    // 移除無效的 ID
+    const validIds = uniqueIds.filter(id => /^[a-zA-Z0-9_-]{11}$/.test(id));
+    const invalidIds = uniqueIds.filter(id => !/^[a-zA-Z0-9_-]{11}$/.test(id));
+    
+    if (invalidIds.length > 0) {
+        console.warn(`⚠️ 發現 ${invalidIds.length} 個無效的影片ID:`, invalidIds);
+        // 標記為失敗
+        invalidIds.forEach(id => {
+            results.set(id, {
+                success: false,
+                error: '無效的 YouTube 影片ID格式',
+                data: null
+            });
+        });
+    }
+    
+    // 切分批次
+    const batches = [];
+    for (let i = 0; i < validIds.length; i += batchSize) {
+        batches.push(validIds.slice(i, i + batchSize));
+    }
+    
+    console.log(`📦 已分為 ${batches.length} 個批次`);
+    
+    // 計算預估配額消耗
+    // YouTube Data API v3: videos.list (part=statistics,snippet) = 2 個配額單位/請求
+    // 每個請求最多 50 個影片
+    const quotaPerBatch = 2; // 每個請求消耗 2 配額
+    const totalQuota = batches.length * quotaPerBatch;
+    console.log(`💰 預估配額消耗: 每批次 ${quotaPerBatch} × ${batches.length} 批次 = ${totalQuota} 配額單元`);
+    
+    // 處理所有批次
+    let totalSuccessful = 0;
+    let totalFailed = 0;
+    
+    for (let i = 0; i < batches.length; i++) {
+        const batch = batches[i];
+        const batchNum = i + 1;
+        
+        console.log(`\n🔄 批次 ${batchNum}/${batches.length}: 查詢 ${batch.length} 個影片`);
+        console.log(`   IDs: ${batch.slice(0, 3).join(', ')}${batch.length > 3 ? '...' : ''}`);
+        
+        try {
+            // 構建 API URL
+            const idsParam = batch.join(',');
+            const youtubeUrl = `${YOUTUBE_API_BASE}?id=${idsParam}&part=statistics,snippet&key=${YOUTUBE_API_KEY}`;
+            
+            console.log(`   🔗 API URL: ${youtubeUrl.substring(0, 80)}...`);
+            
+            // 發送請求
+            const youtubeResponse = await fetch(youtubeUrl);
+            
+            if (!youtubeResponse.ok) {
+                const errorText = await youtubeResponse.text();
+                console.error(`   ❌ API 錯誤 (${youtubeResponse.status}):`, errorText.substring(0, 100));
+                
+                // 標記整個批次為失敗
+                batch.forEach(id => {
+                    results.set(id, {
+                        success: false,
+                        error: `YouTube API 錯誤: ${youtubeResponse.status}`,
+                        data: null
+                    });
+                    totalFailed++;
+                });
+                continue;
+            }
+            
+            const youtubeData = await youtubeResponse.json();
+            
+            // 處理成功返回的影片
+            if (youtubeData.items && Array.isArray(youtubeData.items)) {
+                const foundIds = new Set();
+                
+                youtubeData.items.forEach(item => {
+                    const videoId = item.id;
+                    foundIds.add(videoId);
+                    
+                    const viewCount = parseInt(item.statistics.viewCount, 10) || 0;
+                    const likeCount = item.statistics.likeCount ? parseInt(item.statistics.likeCount, 10) : 0;
+                    const publishDate = item.snippet.publishedAt.split('T')[0];
+                    const title = item.snippet.title;
+                    const channelTitle = item.snippet.channelTitle;
+                    
+                    results.set(videoId, {
+                        success: true,
+                        error: null,
+                        data: {
+                            videoId,
+                            viewCount,
+                            likeCount,
+                            publishDate,
+                            snippet: {
+                                title,
+                                channelTitle,
+                                description: item.snippet.description,
+                                thumbnails: item.snippet.thumbnails
+                            }
+                        }
+                    });
+                    
+                    totalSuccessful++;
+                });
+                
+                console.log(`   ✅ 成功獲取: ${youtubeData.items.length}/${batch.length} 個影片`);
+                
+                // 標記未找到的影片
+                batch.forEach(id => {
+                    if (!foundIds.has(id)) {
+                        results.set(id, {
+                            success: false,
+                            error: '影片未找到或已被刪除',
+                            data: null
+                        });
+                        totalFailed++;
+                        console.warn(`   ⚠️ 影片未找到: ${id}`);
+                    }
+                });
+            } else {
+                console.error(`   ❌ API 返回無效數據`);
+                batch.forEach(id => {
+                    results.set(id, {
+                        success: false,
+                        error: 'API 返回無效數據',
+                        data: null
+                    });
+                    totalFailed++;
+                });
+            }
+            
+        } catch (error) {
+            console.error(`   ❌ 批次 ${batchNum} 處理失敗:`, error.message);
+            batch.forEach(id => {
+                results.set(id, {
+                    success: false,
+                    error: error.message,
+                    data: null
+                });
+                totalFailed++;
+            });
+        }
+        
+        // 如果還有更多批次，等待一下避免觸發 API 限制
+        if (i < batches.length - 1) {
+            console.log(`   ⏳ 等待 100ms 後繼續下一批次...`);
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+    }
+    
+    // 統計結果
+    const elapsedTime = Date.now() - startTime;
+    console.log(`\n📊 批量查詢完成:`);
+    console.log(`   ✅ 成功: ${totalSuccessful}`);
+    console.log(`   ❌ 失敗: ${totalFailed}`);
+    console.log(`   ⏱️ 總耗時: ${(elapsedTime / 1000).toFixed(2)} 秒`);
+    console.log(`   💰 實際配額消耗: ${batches.length * 2} 單元`);
+    
+    return results;
+}
+
 export default async function handler(req, res) {
     // ==================== 【重要修改】優先處理影片管理操作 ====================
     const { action } = req.query;
@@ -130,6 +308,7 @@ export default async function handler(req, res) {
         console.log(`✅ 載入動態影片配置，追蹤影片數: ${ALL_VIDEO_IDS.length}`);
         
         const results = [];
+        const failedVideoIds = [];
         
         // 【重要】讀取現有的 Gist 以保留所有檔案
         console.log('📚 讀取現有 Gist 數據...');
@@ -153,53 +332,39 @@ export default async function handler(req, res) {
             console.log(`📁 找到 ${Object.keys(existingGist.files).length} 個現有檔案`);
         }
         
-        // 4. 處理所有影片
-        console.log(`🚀 開始處理 ${ALL_VIDEO_IDS.length} 個影片...`);
+        // ==================== 【新增】批量查詢功能 ====================
+        console.log(`🚀 開始批量處理 ${ALL_VIDEO_IDS.length} 個影片...`);
+        
+        // 使用批量查詢獲取所有影片數據
+        const batchResults = await batchFetchVideos(ALL_VIDEO_IDS);
+        
+        // 處理批量查詢結果
+        const timestamp = Date.now();
+        const currentDate = new Date(timestamp).toISOString().split('T')[0];
+        const currentHour = new Date(timestamp).getHours();
         
         for (const videoId of ALL_VIDEO_IDS) {
             try {
+                const batchResult = batchResults.get(videoId);
                 const videoInfo = Object.values(TRACKED_VIDEOS).find(v => v.id === videoId);
-                console.log(`\n📹 處理影片: ${videoInfo?.name || videoId} (${videoId})`);
                 
-                // 4.1 呼叫 YouTube API - 修改為獲取 statistics 和 snippet
-                const youtubeUrl = `${YOUTUBE_API_BASE}?id=${videoId}&part=statistics,snippet&key=${YOUTUBE_API_KEY}`;
-                console.log(`   🔍 呼叫 YouTube API (statistics,snippet)...`);
-                
-                const youtubeResponse = await fetch(youtubeUrl);
-                
-                if (!youtubeResponse.ok) {
-                    const errorText = await youtubeResponse.text();
-                    console.error(`   ❌ YouTube API 錯誤 (${videoId}):`, youtubeResponse.status, errorText.substring(0, 200));
-                    results.push({ 
-                        videoId, 
-                        success: false, 
-                        error: `YouTube API 錯誤: ${youtubeResponse.status}`,
-                        details: errorText.substring(0, 200)
+                if (!batchResult || !batchResult.success) {
+                    console.error(`\n❌ 影片 ${videoInfo?.name || videoId} 獲取失敗`);
+                    results.push({
+                        videoId,
+                        success: false,
+                        error: batchResult?.error || '未知錯誤',
+                        stack: batchResult?.stack
                     });
+                    failedVideoIds.push(videoId);
                     continue;
                 }
                 
-                const youtubeData = await youtubeResponse.json();
+                const { viewCount, likeCount, publishDate, snippet } = batchResult.data;
                 
-                if (!youtubeData.items || youtubeData.items.length === 0) {
-                    console.error(`   ❌ 影片未找到: ${videoId}`);
-                    results.push({ 
-                        videoId, 
-                        success: false, 
-                        error: '影片未找到或無法存取',
-                        youtubeData: youtubeData
-                    });
-                    continue;
-                }
-                
-                const viewCount = parseInt(youtubeData.items[0].statistics.viewCount, 10);
-                const likeCount = youtubeData.items[0].statistics.likeCount ? parseInt(youtubeData.items[0].statistics.likeCount, 10) : 0;
-                const publishDate = youtubeData.items[0].snippet.publishedAt.split('T')[0];
-                const timestamp = Date.now();
-                const currentDate = new Date(timestamp).toISOString().split('T')[0];
-                const currentHour = new Date(timestamp).getHours();
-                
-                console.log(`   ✅ 獲取成功: ${viewCount.toLocaleString()} 次觀看, ${likeCount.toLocaleString()} 個讚 (${currentDate} ${currentHour}:00), 發佈日期: ${publishDate}`);
+                console.log(`\n✅ 處理影片: ${videoInfo?.name || videoId} (${videoId})`);
+                console.log(`   📊 播放量: ${viewCount.toLocaleString()}, Like數: ${likeCount.toLocaleString()}`);
+                console.log(`   📅 發佈日期: ${publishDate}, 數據時間: ${currentDate} ${currentHour}:00`);
                 
                 // 4.2 讀取該影片的現有數據
                 const fileName = `youtube-data-${videoId}.json`;
@@ -229,7 +394,6 @@ export default async function handler(req, res) {
                     try {
                         const oldData = JSON.parse(existingGist.files['youtube-data.json'].content);
                         if (Array.isArray(oldData)) {
-                            // 添加 videoId 和 videoName 字段
                             currentData = oldData.map(item => ({
                                 timestamp: item.timestamp,
                                 viewCount: item.viewCount,
@@ -245,7 +409,7 @@ export default async function handler(req, res) {
                     }
                 }
                 
-                // 4.4 添加新記錄 - 添加 likeCount 字段
+                // 4.4 添加新記錄
                 const newEntry = { 
                     timestamp, 
                     viewCount, 
@@ -257,7 +421,7 @@ export default async function handler(req, res) {
                 };
                 
                 currentData.push(newEntry);
-                console.log(`   📝 添加新記錄: ${currentDate} ${currentHour}:00 - ${viewCount.toLocaleString()} 次觀看, ${likeCount.toLocaleString()} 個讚`);
+                console.log(`   📝 添加新記錄: ${currentDate} ${currentHour}:00`);
                 
                 // 4.5 清理舊數據（保留最近30天）
                 const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
@@ -290,17 +454,20 @@ export default async function handler(req, res) {
                 console.log(`   ✅ ${videoInfo?.name || videoId}: 總計 ${currentData.length} 條記錄`);
                 
             } catch (error) {
-                console.error(`   ❌ 處理影片 ${videoId} 失敗:`, error.message);
+                console.error(`\n   ❌ 處理影片 ${videoId} 失敗:`, error.message);
                 results.push({
                     videoId,
                     success: false,
                     error: error.message,
                     stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
                 });
+                failedVideoIds.push(videoId);
             }
-            
-            // 避免太快觸發YouTube API限制
-            await new Promise(resolve => setTimeout(resolve, 800));
+        }
+        
+        // 顯示失敗的影片ID以便重試
+        if (failedVideoIds.length > 0) {
+            console.log(`\n⚠️ 以下 ${failedVideoIds.length} 個影片獲取失敗:`, failedVideoIds);
         }
         
         // 5. 批量更新所有檔案到Gist
