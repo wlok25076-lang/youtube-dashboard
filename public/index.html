@@ -1051,16 +1051,7 @@
             
             <div class="add-video-form">
                 <input type="text" id="newVideoId" placeholder="YouTube影片ID (例如: dQw4w9WgXcQ)" maxlength="20">
-                <button id="fetchTitleBtn" class="secondary-btn">🔍 獲取標題</button>
                 <button id="addVideoBtn" class="primary-btn">添加影片</button>
-            </div>
-            
-            <!-- 標題預覽區域 -->
-            <div id="titlePreview" class="video-info" style="margin-top: 10px; display: none;">
-                <h3 id="previewVideoName">影片標題</h3>
-                <p id="previewVideoId" style="color: var(--secondary-color);">影片ID</p>
-                <button id="confirmAddBtn" class="primary-btn" style="margin-top: 10px;">確認添加</button>
-                <button id="cancelAddBtn" class="secondary-btn" style="margin-top: 10px; margin-left: 10px;">取消</button>
             </div>
             
             <div class="color-picker" id="colorPicker">
@@ -1691,11 +1682,93 @@
             showMessage('已取消添加', 'info');
         }
         
-        // 【修改】現有的 addNewVideo 函數（保留向後兼容）
-        function addNewVideo() {
-            // 舊版直接添加功能現在會提示用戶使用新流程
-            showMessage('請先點擊「獲取標題」按鈕自動獲取影片名稱', 'info');
-            document.getElementById('newVideoId').focus();
+        // 【修改】新的 addNewVideo 函數 - 自動獲取標題並添加
+        async function addNewVideo() {
+            const idInput = document.getElementById('newVideoId');
+            const id = idInput.value.trim();
+            const btn = document.getElementById('addVideoBtn');
+            
+            // 1. 驗證影片ID
+            if (!id) {
+                showMessage('請輸入影片ID', 'error');
+                idInput.focus();
+                return;
+            }
+            
+            if (!/^[a-zA-Z0-9_-]{11}$/.test(id)) {
+                showMessage('YouTube影片ID格式錯誤（應為11位字符）', 'error');
+                idInput.focus();
+                return;
+            }
+            
+            // 2. 檢查是否已存在
+            if (videoOptions.some(video => video.id === id)) {
+                showMessage('影片ID已存在', 'error');
+                return;
+            }
+            
+            // 3. 顯示加載狀態
+            const originalText = btn.textContent;
+            btn.textContent = '獲取標題中...';
+            btn.disabled = true;
+            
+            try {
+                // 4. 調用後端獲取標題
+                const response = await fetch(`/api/fetch-and-store-multi?action=getTitle&videoId=${id}`);
+                const result = await response.json();
+                
+                if (!result.success) {
+                    throw new Error(result.error || '無法獲取影片標題');
+                }
+                
+                const videoTitle = result.title;
+                
+                // 5. 顯示確認訊息
+                btn.textContent = '添加中...';
+                
+                // 6. 添加到後端
+                const addResult = await addVideoToBackend({
+                    id: id,
+                    name: videoTitle,
+                    color: selectedColor,
+                    description: `${videoTitle} - YouTube影片播放量追蹤`
+                });
+                
+                if (!addResult.success) {
+                    throw new Error(addResult.error || '添加失敗');
+                }
+                
+                // 7. 更新本地
+                videoOptions.push({
+                    id: id,
+                    name: videoTitle,
+                    color: selectedColor,
+                    description: `${videoTitle} - YouTube影片播放量追蹤`
+                });
+                
+                saveVideoList();
+                updateVideoSelector();
+                updateCompareCheckboxes();
+                loadVideoList();
+                
+                // 8. 清空輸入並顯示成功訊息
+                idInput.value = '';
+                showMessage(`影片 "${videoTitle}" 已成功添加`, 'success');
+                
+                // 9. 自動切換到新影片
+                document.getElementById('videoSelect').value = id;
+                currentVideoId = id;
+                currentVideoColor = selectedColor;
+                localStorage.setItem('selectedVideoId', id);
+                updateVideoInfo();
+                loadChartData();
+                
+            } catch (error) {
+                showMessage(error.message, 'error');
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
         }
         
         // 【修改】現有的 editVideo 函數，加入後端同步
