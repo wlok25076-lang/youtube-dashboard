@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube API 配額監控</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #fff;
+        }
+
+        .quota-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 24px;
+            max-width: 400px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .quota-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .quota-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .quota-icon {
+            width: 24px;
+            height: 24px;
+        }
+
+        .refresh-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .refresh-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .refresh-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .quota-usage {
+            text-align: center;
+            margin-bottom: 16px;
+        }
+
+        .usage-text {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .usage-text.normal { color: #4ade80; }
+        .usage-text.warning { color: #fbbf24; }
+        .usage-text.danger { color: #ef4444; }
+
+        .usage-subtext {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .progress-container {
+            margin-bottom: 16px;
+        }
+
+        .progress-bar {
+            height: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 6px;
+            transition: width 0.5s ease, background-color 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .progress-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(
+                90deg,
+                transparent 0%,
+                rgba(255, 255, 255, 0.2) 50%,
+                transparent 100%
+            );
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .progress-fill.normal { background: linear-gradient(90deg, #22c55e, #4ade80); }
+        .progress-fill.warning { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+        .progress-fill.danger { background: linear-gradient(90deg, #dc2626, #ef4444); }
+
+        .progress-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .warning-banner {
+            background: rgba(251, 191, 36, 0.1);
+            border: 1px solid rgba(251, 191, 36, 0.3);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: #fbbf24;
+        }
+
+        .danger-banner {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: #ef4444;
+        }
+
+        .reset-timer {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+        }
+
+        .timer-label {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 4px;
+        }
+
+        .timer-value {
+            font-size: 18px;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .api-costs {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .api-costs-title {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 8px;
+        }
+
+        .cost-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.7);
+            padding: 4px 0;
+        }
+
+        .cost-badge {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 20px;
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 8px;
+            padding: 12px;
+            color: #ef4444;
+            font-size: 13px;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .status-indicator.online { background: #4ade80; }
+        .status-indicator.offline { background: #ef4444; }
+    </style>
+</head>
+<body>
+    <div class="quota-card" id="quotaCard">
+        <!-- Content will be loaded here -->
+    </div>
+
+    <script>
+        const API_BASE = '/api/fetch-and-store-multi';
+        const QUOTA_LIMIT = 10000;
+        const WARNING_THRESHOLD = 8000;
+        const DANGER_THRESHOLD = 9500;
+
+        function getStatusClass(percentage) {
+            if (percentage >= DANGER_THRESHOLD / QUOTA_LIMIT * 100) return 'danger';
+            if (percentage >= WARNING_THRESHOLD / QUOTA_LIMIT * 100) return 'warning';
+            return 'normal';
+        }
+
+        function formatNumber(num) {
+            return num.toLocaleString();
+        }
+
+        function formatTime(hours, minutes) {
+            if (hours > 0) {
+                return `${hours} 小時 ${minutes} 分鐘`;
+            }
+            return `${minutes} 分鐘`;
+        }
+
+        async function fetchQuotaStatus() {
+            try {
+                const response = await fetch(`${API_BASE}?action=quota`);
+                const data = await response.json();
+                if (data.success) {
+                    return data.quota;
+                }
+                throw new Error(data.message || 'Failed to fetch quota status');
+            } catch (error) {
+                console.error('Failed to fetch quota status:', error);
+                throw error;
+            }
+        }
+
+        function renderQuotaCard(quota, loading = false, error = null) {
+            const card = document.getElementById('quotaCard');
+            
+            if (loading) {
+                card.innerHTML = `
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <span>載入中...</span>
+                    </div>
+                `;
+                return;
+            }
+
+            if (error) {
+                card.innerHTML = `
+                    <div class="error">
+                        <span class="status-indicator offline"></span>
+                        ${error}
+                    </div>
+                `;
+                return;
+            }
+
+            const percentage = parseFloat(quota.percentage);
+            const statusClass = getStatusClass(percentage);
+            const { hours, minutes } = quota.resetTime;
+
+            let warningBanner = '';
+            if (percentage >= DANGER_THRESHOLD / QUOTA_LIMIT * 100) {
+                warningBanner = `
+                    <div class="danger-banner">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" y1="8" x2="12" y2="12"/>
+                            <line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                        配額即將用盡！請減少 API 呼叫
+                    </div>
+                `;
+            } else if (percentage >= WARNING_THRESHOLD / QUOTA_LIMIT * 100) {
+                warningBanner = `
+                    <div class="warning-banner">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                            <line x1="12" y1="9" x2="12" y2="13"/>
+                            <line x1="12" y1="17" x2="12.01" y2="17"/>
+                        </svg>
+                        配額使用過半，請留意使用量
+                    </div>
+                `;
+            }
+
+            card.innerHTML = `
+                <div class="quota-header">
+                    <div class="quota-title">
+                        <svg class="quota-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                        </svg>
+                        YouTube API 配額
+                        <span class="status-indicator online"></span>
+                    </div>
+                    <button class="refresh-btn" onclick="loadQuotaStatus()" id="refreshBtn">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 4v6h-6"/>
+                            <path d="M1 20v-6h6"/>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                        </svg>
+                        刷新
+                    </button>
+                </div>
+
+                ${warningBanner}
+
+                <div class="quota-usage">
+                    <div class="usage-text ${statusClass}">${formatNumber(quota.usage)}</div>
+                    <div class="usage-subtext">/ ${formatNumber(QUOTA_LIMIT)} units (${percentage.toFixed(2)}%)</div>
+                </div>
+
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill ${statusClass}" style="width: ${Math.min(percentage, 100)}%"></div>
+                    </div>
+                    <div class="progress-labels">
+                        <span>0</span>
+                        <span>${formatNumber(QUOTA_LIMIT)}</span>
+                    </div>
+                </div>
+
+                <div class="reset-timer">
+                    <div class="timer-label">配額重置倒計時</div>
+                    <div class="timer-value">${formatTime(hours, minutes)}</div>
+                </div>
+
+                <div class="api-costs">
+                    <div class="api-costs-title">常見 API 成本</div>
+                    <div class="cost-item">
+                        <span>videos.list</span>
+                        <span class="cost-badge">1 unit</span>
+                    </div>
+                    <div class="cost-item">
+                        <span>search.list</span>
+                        <span class="cost-badge">100 units</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function loadQuotaStatus() {
+            const refreshBtn = document.getElementById('refreshBtn');
+            if (refreshBtn) {
+                refreshBtn.disabled = true;
+            }
+
+            renderQuotaCard(null, true);
+
+            try {
+                const quota = await fetchQuotaStatus();
+                renderQuotaCard(quota);
+            } catch (error) {
+                renderQuotaCard(null, false, '無法載入配額狀態，請稍後重試');
+            }
+
+            if (refreshBtn) {
+                refreshBtn.disabled = false;
+            }
+        }
+
+        // Auto-refresh every 60 seconds
+        document.addEventListener('DOMContentLoaded', () => {
+            loadQuotaStatus();
+            setInterval(loadQuotaStatus, 60000);
+        });
+
+        // Expose for manual refresh
+        window.loadQuotaStatus = loadQuotaStatus;
+    </script>
+</body>
+</html>

@@ -8,7 +8,7 @@ const GIST_ID = process.env.GIST_ID;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const CRON_AUTH_TOKEN = process.env.CRON_AUTH_TOKEN;
 
-// 【修改】導入影片配置函數
+// 【修改】導入影片配置函數和配額管理器
 import { 
     getUserVideoConfig, 
     saveUserVideoConfig,
@@ -16,6 +16,8 @@ import {
     DEFAULT_TRACKED_VIDEOS,
     DEFAULT_ALL_VIDEO_IDS 
 } from './videos-config.js';
+
+import { trackApiUsage, getQuotaStatus, resetQuotaIfNeeded } from './quota-manager.js';
 
 // 【修改】影片配置 - 改為動態獲取
 let TRACKED_VIDEOS = DEFAULT_TRACKED_VIDEOS;
@@ -90,6 +92,11 @@ async function batchFetchVideos(videoIds, batchSize = 50) {
             
             // 發送請求
             const youtubeResponse = await fetch(youtubeUrl);
+            
+            // 【新增】追蹤 API 配額使用（非同步，不阻塞）
+            trackApiUsage('videos.list', 2).catch(err => {
+                console.warn('⚠️ 配額追蹤失敗:', err.message);
+            });
             
             if (!youtubeResponse.ok) {
                 const errorText = await youtubeResponse.text();
@@ -203,8 +210,8 @@ export default async function handler(req, res) {
     // ==================== 【重要修改】優先處理影片管理操作 ====================
     const { action } = req.query;
     
-    // 如果是影片管理操作（add/delete/update/get/verify/getTitle），直接處理
-    if (action === 'get' || action === 'add' || action === 'delete' || action === 'update' || action === 'verify' || action === 'getTitle') {
+    // 如果是影片管理操作（add/delete/update/get/verify/getTitle/quota），直接處理
+    if (action === 'get' || action === 'add' || action === 'delete' || action === 'update' || action === 'verify' || action === 'getTitle' || action === 'quota') {
         console.log(`🎬 處理影片管理操作: ${action}`);
         return await handleVideoManagement(req, res);
     }
@@ -875,6 +882,19 @@ async function handleVideoManagement(req, res) {
                     message: '影片刪除成功',
                     deletedVideo,
                     total: videoList.length,
+                    timestamp: new Date().toISOString()
+                });
+            }
+                
+            case 'quota': {
+                // 獲取配額狀態
+                console.log('📊 獲取配額狀態...');
+                const quotaStatus = await getQuotaStatus();
+                
+                console.log(`✅ 返回配額狀態: 使用 ${quotaStatus.usage}/${quotaStatus.limit}`);
+                return res.status(200).json({
+                    success: true,
+                    quota: quotaStatus,
                     timestamp: new Date().toISOString()
                 });
             }
