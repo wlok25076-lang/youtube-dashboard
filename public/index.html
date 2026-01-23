@@ -1022,12 +1022,42 @@
             font-size: 14px;
             display: none;
         }
+        
+        /* ========== 【新增】緊湊型配額顯示樣式 ========== */
+        .quota-mini {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            padding: 10px 12px;
+            background: rgba(0, 112, 243, 0.05);
+            border-radius: 8px;
+            border: 1px solid rgba(0, 112, 243, 0.1);
+        }
+        
+        .quota-label {
+            font-weight: 600;
+            color: var(--text-color);
+        }
+        
+        .quota-value {
+            font-weight: 700;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+        
+        .quota-reset {
+            color: var(--secondary-color);
+            font-size: 12px;
+            width: 100%;
+            margin-top: 4px;
+            padding-top: 8px;
+            border-top: 1px dashed rgba(0, 0, 0, 0.1);
+        }
     </style>
 </head>
 <body>
-    <!-- Quota Display Container -->
-    <div id="quotaDisplayContainer"></div>
-    
     <div class="container">
         <h1>📊 YouTube 多影片播放量追蹤儀表板</h1>
         
@@ -1050,6 +1080,9 @@
                 <h3><span>🎬</span> 影片管理</h3>
                 <button id="closeManage" class="icon-btn">✕</button>
             </div>
+            
+            <!-- 【新增】緊湊型配額顯示 -->
+            <div id="quotaCompactDisplay" style="margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.03); border-radius: 8px;"></div>
             
             <div class="success-message" id="successMessage">
                 <span>✓</span> <span id="successText"></span>
@@ -1310,6 +1343,63 @@
         
         // ==================== 【新增】密碼驗證功能 ====================
         
+        // 【新增】渲染緊湊型配額顯示
+        async function renderCompactQuota() {
+            const container = document.getElementById('quotaCompactDisplay');
+            if (!container) return;
+            
+            try {
+                const response = await fetch('/api/quota-status');
+                const result = await response.json();
+                
+                if (result.success && result.data) {
+                    const quota = result.data;
+                    
+                    // 計算配額百分比
+                    const quotaPercent = Math.round((quota.used / quota.total) * 100);
+                    
+                    // 根據配額狀態設定顏色
+                    let colorClass = 'var(--positive-color)';
+                    let statusText = '正常';
+                    let progressColor = 'var(--positive-color)';
+                    
+                    if (quotaPercent >= 90) {
+                        colorClass = 'var(--negative-color)';
+                        statusText = '危險';
+                        progressColor = '#ef4444';
+                    } else if (quotaPercent >= 70) {
+                        colorClass = 'var(--warning-color)';
+                        statusText = '警告';
+                        progressColor = '#f59e0b';
+                    }
+                    
+                    // 格式化重置時間
+                    const resetDate = new Date(quota.resetDate);
+                    const resetText = resetDate.toLocaleDateString('zh-TW', {
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                    
+                    container.innerHTML = `
+                        <div class="quota-mini">
+                            <span class="quota-label">📊 API配額：</span>
+                            <span class="quota-value" style="color: ${colorClass}">${formatNumberWithCommas(quota.used)} / ${formatNumberWithCommas(quota.total)}</span>
+                            <span class="quota-value" style="color: ${colorClass}">(${quotaPercent}%)</span>
+                            <span style="color: ${colorClass}; font-size: 12px;">${statusText}</span>
+                            <div class="quota-reset">🔄 重置時間: ${resetText}</div>
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = `<div class="quota-mini" style="color: var(--secondary-color);">載入配額失敗</div>`;
+                }
+            } catch (error) {
+                console.error('載入配額失敗:', error);
+                container.innerHTML = `<div class="quota-mini" style="color: var(--negative-color);">無法連接配額服務</div>`;
+            }
+        }
+        
         // 顯示密碼對話框
         function showPasswordDialog() {
             document.getElementById('passwordDialog').classList.remove('hidden');
@@ -1350,22 +1440,22 @@
             const passwordCancelBtn = document.getElementById('passwordCancel');
             const passwordError = document.getElementById('passwordError');
             
-            // 確認按鈕
-            passwordConfirmBtn.addEventListener('click', async function() {
-                const password = adminPasswordInput.value.trim();
-                
-                if (!password) {
-                    passwordError.textContent = '請輸入密碼';
-                    passwordError.classList.remove('hidden');
-                    return;
-                }
-                
-                // 顯示加載狀態
-                const originalText = this.textContent;
-                this.textContent = '驗證中...';
-                this.disabled = true;
-                
-                try {
+        // 確認按鈕
+        passwordConfirmBtn.addEventListener('click', async function() {
+            const password = adminPasswordInput.value.trim();
+            
+            if (!password) {
+                passwordError.textContent = '請輸入密碼';
+                passwordError.classList.remove('hidden');
+                return;
+            }
+            
+            // 顯示加載狀態
+            const originalText = this.textContent;
+            this.textContent = '驗證中...';
+            this.disabled = true;
+            
+            try {
                 const isValid = await verifyPassword(password);
                 
                 if (isValid) {
@@ -1375,18 +1465,21 @@
                     document.getElementById('managePanel').classList.remove('hidden');
                     document.getElementById('manageToggle').textContent = '✕ 關閉管理';
                     loadVideoList();
+                    
+                    // 【新增】渲染緊湊型配額顯示
+                    renderCompactQuota();
                 } else {
                     passwordError.textContent = '密碼錯誤';
                     passwordError.classList.remove('hidden');
                     adminPasswordInput.value = '';
                     adminPasswordInput.focus();
                 }
-                } finally {
-                    // 恢復按鈕狀態
-                    this.textContent = originalText;
-                    this.disabled = false;
-                }
-            });
+            } finally {
+                // 恢復按鈕狀態
+                this.textContent = originalText;
+                this.disabled = false;
+            }
+        });
             
             // 取消按鈕
             passwordCancelBtn.addEventListener('click', function() {

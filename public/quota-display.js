@@ -39,10 +39,43 @@ class QuotaDisplay {
     }
     
     async fetchQuota() {
+        // 【修改】支持緊湊模式使用不同的 API endpoint
+        const endpoint = this.container.id === 'quotaCompactDisplay' 
+            ? '/api/quota-status' 
+            : this.options.apiEndpoint;
+        
         try {
-            const response = await fetch(this.options.apiEndpoint);
+            const response = await fetch(endpoint);
             const data = await response.json();
             
+            // 處理新格式 /api/quota-status 返回
+            if (data.success && data.data) {
+                const quota = data.data;
+                const percentage = Math.round((quota.used / quota.total) * 100);
+                const resetDate = new Date(quota.resetDate);
+                const now = new Date();
+                
+                // 計算距離重置的時間
+                const diffMs = resetDate - now;
+                const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+                const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                
+                this.quota = {
+                    usage: quota.used || 0,
+                    limit: quota.total || 10000,
+                    percentage: percentage,
+                    resetTime: { hours: Math.max(0, diffHours), minutes: Math.max(0, diffMinutes) },
+                    date: quota.resetDate
+                };
+                
+                if (this.options.onStatusChange) {
+                    this.options.onStatusChange(this.quota);
+                }
+                
+                return true;
+            }
+            
+            // 處理舊格式
             if (data.success && data.quota) {
                 this.quota = {
                     usage: data.quota.usage || 0,
@@ -75,6 +108,11 @@ class QuotaDisplay {
     }
     
     render() {
+        // 【新增】檢查是否為緊湊顯示模式
+        if (this.container.id === 'quotaCompactDisplay') {
+            return this.renderCompact();
+        }
+        
         const { usage, limit, percentage, resetTime } = this.quota;
         
         // 計算狀態
@@ -151,6 +189,31 @@ class QuotaDisplay {
                     </div>
                 </div>
                 ` : ''}
+            </div>
+        `;
+    }
+    
+    // 【新增】緊湊模式渲染
+    renderCompact() {
+        const { usage, limit, percentage, resetTime } = this.quota;
+        
+        // 格式化時間
+        const resetTimeText = resetTime.hours > 0 
+            ? `${resetTime.hours} 小時 ${resetTime.minutes} 分鐘`
+            : `${resetTime.minutes} 分鐘`;
+        
+        // 計算狀態顏色
+        const isDanger = percentage >= 95;
+        const isWarning = percentage >= 80;
+        const valueColor = isDanger ? '#ef4444' : isWarning ? '#f59e0b' : '#0070f3';
+        
+        this.container.innerHTML = `
+            <div class="quota-mini">
+                <span class="quota-label">API 配額:</span>
+                <span class="quota-value" style="color: ${valueColor}">
+                    ${usage.toLocaleString()} / ${limit.toLocaleString()} units (${percentage.toFixed(2)}%)
+                </span>
+                <span class="quota-reset">配額將在 ${resetTimeText} 後重置（PT 時區）</span>
             </div>
         `;
     }
