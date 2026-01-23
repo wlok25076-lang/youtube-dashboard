@@ -25,8 +25,8 @@ export default async function handler(req, res) {
     // ==================== 【重要修改】優先處理影片管理操作 ====================
     const { action } = req.query;
     
-    // 如果是影片管理操作（add/delete/update/get/verify），直接處理
-    if (action === 'get' || action === 'add' || action === 'delete' || action === 'update' || action === 'verify') {
+    // 如果是影片管理操作（add/delete/update/get/verify/getTitle），直接處理
+    if (action === 'get' || action === 'add' || action === 'delete' || action === 'update' || action === 'verify' || action === 'getTitle') {
         console.log(`🎬 處理影片管理操作: ${action}`);
         return await handleVideoManagement(req, res);
     }
@@ -454,6 +454,100 @@ async function handleVideoManagement(req, res) {
                 });
             }
                 
+            case 'getTitle': {
+                // 獲取影片標題
+                console.log('📹 獲取影片標題...');
+                const videoId = req.query.videoId;
+                
+                if (!videoId) {
+                    console.error('❌ 缺少影片ID');
+                    return res.status(400).json({
+                        success: false,
+                        error: '影片ID是必需的',
+                        hint: '使用 ?videoId=<YouTube影片ID>'
+                    });
+                }
+                
+                // 驗證YouTube影片ID格式
+                if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+                    console.error('❌ 無效的YouTube影片ID格式:', videoId);
+                    return res.status(400).json({
+                        success: false,
+                        error: '無效的YouTube影片ID格式',
+                        hint: 'YouTube影片ID應為11位字符',
+                        example: 'dQw4w9WgXcQ',
+                        received: videoId
+                    });
+                }
+                
+                // 檢查是否配置了YouTube API Key
+                if (!YOUTUBE_API_KEY) {
+                    console.warn('⚠️ 未配置YouTube API Key，使用標題獲取替代方案');
+                    // 嘗試從標題模式中提取標題
+                    return res.status(200).json({
+                        success: true,
+                        title: `影片 ${videoId}`,
+                        videoId: videoId,
+                        message: '未配置YouTube API，使用預設標題'
+                    });
+                }
+                
+                try {
+                    // 呼叫YouTube API獲取影片資訊
+                    const youtubeUrl = `${YOUTUBE_API_BASE}?id=${videoId}&part=snippet&key=${YOUTUBE_API_KEY}`;
+                    console.log(`   🔍 呼叫YouTube API: ${youtubeUrl.substring(0, 80)}...`);
+                    
+                    const youtubeResponse = await fetch(youtubeUrl);
+                    
+                    if (!youtubeResponse.ok) {
+                        const errorText = await youtubeResponse.text();
+                        console.error(`   ❌ YouTube API錯誤 (${videoId}):`, youtubeResponse.status);
+                        return res.status(youtubeResponse.status).json({
+                            success: false,
+                            error: 'YouTube API錯誤',
+                            message: `API返回 ${youtubeResponse.status}: ${errorText.substring(0, 100)}`
+                        });
+                    }
+                    
+                    const youtubeData = await youtubeResponse.json();
+                    
+                    if (!youtubeData.items || youtubeData.items.length === 0) {
+                        console.error(`   ❌ 影片未找到: ${videoId}`);
+                        return res.status(404).json({
+                            success: false,
+                            error: '影片未找到',
+                            message: '該YouTube影片ID可能不存在或已被刪除',
+                            videoId: videoId
+                        });
+                    }
+                    
+                    const title = youtubeData.items[0].snippet.title;
+                    const channelTitle = youtubeData.items[0].snippet.channelTitle;
+                    const publishDate = youtubeData.items[0].snippet.publishedAt.split('T')[0];
+                    
+                    console.log(`   ✅ 獲取成功: "${title}"`);
+                    console.log(`   📺 頻道: ${channelTitle}`);
+                    console.log(`   📅 發佈日期: ${publishDate}`);
+                    
+                    return res.status(200).json({
+                        success: true,
+                        title: title,
+                        videoId: videoId,
+                        channelTitle: channelTitle,
+                        publishDate: publishDate,
+                        timestamp: new Date().toISOString()
+                    });
+                    
+                } catch (error) {
+                    console.error(`   ❌ 獲取影片標題失敗:`, error.message);
+                    return res.status(500).json({
+                        success: false,
+                        error: '獲取失敗',
+                        message: error.message
+                    });
+                }
+            }
+                
             case 'add': {
                 // 添加新影片
                 console.log('➕ 添加新影片...', body);
@@ -684,7 +778,7 @@ async function handleVideoManagement(req, res) {
                 return res.status(400).json({
                     success: false,
                     error: '未知的操作類型',
-                    allowedActions: ['get', 'add', 'delete', 'update', 'verify'],
+                    allowedActions: ['get', 'add', 'delete', 'update', 'verify', 'getTitle'],
                     received: action
                 });
         }

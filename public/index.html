@@ -1050,9 +1050,17 @@
             </div>
             
             <div class="add-video-form">
-                <input type="text" id="newVideoName" placeholder="影片名稱 (例如: 我的YouTube影片)" maxlength="50">
                 <input type="text" id="newVideoId" placeholder="YouTube影片ID (例如: dQw4w9WgXcQ)" maxlength="20">
+                <button id="fetchTitleBtn" class="secondary-btn">🔍 獲取標題</button>
                 <button id="addVideoBtn" class="primary-btn">添加影片</button>
+            </div>
+            
+            <!-- 標題預覽區域 -->
+            <div id="titlePreview" class="video-info" style="margin-top: 10px; display: none;">
+                <h3 id="previewVideoName">影片標題</h3>
+                <p id="previewVideoId" style="color: var(--secondary-color);">影片ID</p>
+                <button id="confirmAddBtn" class="primary-btn" style="margin-top: 10px;">確認添加</button>
+                <button id="cancelAddBtn" class="secondary-btn" style="margin-top: 10px; margin-left: 10px;">取消</button>
             </div>
             
             <div class="color-picker" id="colorPicker">
@@ -1407,6 +1415,9 @@
             const manageToggle = document.getElementById('manageToggle');
             const closeManageBtn = document.getElementById('closeManage');
             const addVideoBtn = document.getElementById('addVideoBtn');
+            const fetchTitleBtn = document.getElementById('fetchTitleBtn');
+            const confirmAddBtn = document.getElementById('confirmAddBtn');
+            const cancelAddBtn = document.getElementById('cancelAddBtn');
             const colorPicker = document.getElementById('colorPicker');
             const colorOptions = document.getElementById('colorOptions');
             const videoList = document.getElementById('videoList');
@@ -1439,22 +1450,35 @@
             if (closeManageBtn) {
                 closeManageBtn.addEventListener('click', function() {
                     document.getElementById('managePanel').classList.add('hidden');
+                    document.getElementById('titlePreview').style.display = 'none';
+                    pendingVideoData = null;
                     manageToggle.textContent = '🎬 管理影片';
                 });
             }
             
-            // 添加影片
+            // 【新增】獲取標題按鈕
+            if (fetchTitleBtn) {
+                fetchTitleBtn.addEventListener('click', fetchVideoTitle);
+            }
+            
+            // 【新增】確認添加按鈕
+            if (confirmAddBtn) {
+                confirmAddBtn.addEventListener('click', confirmAddVideo);
+            }
+            
+            // 【新增】取消添加按鈕
+            if (cancelAddBtn) {
+                cancelAddBtn.addEventListener('click', cancelAddVideo);
+            }
+            
+            // 添加影片（舊版按鈕，提示用戶使用新流程）
             if (addVideoBtn) {
                 addVideoBtn.addEventListener('click', addNewVideo);
             }
             
-            // 添加影片表單提交
-            document.getElementById('newVideoName').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') addNewVideo();
-            });
-            
+            // 影片ID輸入框按Enter鍵觸發獲取標題
             document.getElementById('newVideoId').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') addNewVideo();
+                if (e.key === 'Enter') fetchVideoTitle();
             });
             
             // 【修改】切換管理面板顯示 - 需要密碼驗證
@@ -1468,6 +1492,8 @@
                     } else {
                         // 如果管理面板是顯示的，直接關閉
                         managePanel.classList.add('hidden');
+                        document.getElementById('titlePreview').style.display = 'none';
+                        pendingVideoData = null;
                         this.textContent = '🎬 管理影片';
                     }
                 });
@@ -1508,96 +1534,169 @@
             });
         }
         
-        // 【修改】現有的 addNewVideo 函數，加入後端同步
-async function addNewVideo() {
-    const nameInput = document.getElementById('newVideoName');
-    const idInput = document.getElementById('newVideoId');
-    
-    const name = nameInput.value.trim();
-    const id = idInput.value.trim();
-    const color = selectedColor;
-    
-    // 驗證輸入
-    if (!name) {
-        showMessage('請輸入影片名稱', 'error');
-        nameInput.focus();
-        return;
-    }
-    
-    if (!id) {
-        showMessage('請輸入影片ID', 'error');
-        idInput.focus();
-        return;
-    }
-    
-    // 驗證YouTube影片ID格式
-    if (!/^[a-zA-Z0-9_-]{11}$/.test(id)) {
-        showMessage('YouTube影片ID格式錯誤，應為11位字符（例如：dQw4w9WgXcQ）', 'error');
-        idInput.focus();
-        return;
-    }
-    
-    // 檢查本地是否已存在
-    if (videoOptions.some(video => video.id === id)) {
-        showMessage('影片ID已存在', 'error');
-        idInput.focus();
-        return;
-    }
-    
-    // 顯示加載狀態
-    const originalButtonText = document.getElementById('addVideoBtn').textContent;
-    document.getElementById('addVideoBtn').textContent = '添加中...';
-    document.getElementById('addVideoBtn').disabled = true;
-    
-    try {
-        // 添加到後端
-        const backendResult = await addVideoToBackend({
-            id: id,
-            name: name,
-            color: color,
-            description: `${name} - YouTube影片播放量追蹤`
-        });
+        // 【新增】獲取影片標題
+        let pendingVideoData = null; // 儲存待確認的影片資料
         
-        if (!backendResult.success) {
-            showMessage(`後端添加失敗: ${backendResult.error}`, 'error');
-            return;
+        async function fetchVideoTitle() {
+            const idInput = document.getElementById('newVideoId');
+            const id = idInput.value.trim();
+            const fetchBtn = document.getElementById('fetchTitleBtn');
+            const titlePreview = document.getElementById('titlePreview');
+            const previewVideoName = document.getElementById('previewVideoName');
+            const previewVideoId = document.getElementById('previewVideoId');
+            
+            // 驗證輸入
+            if (!id) {
+                showMessage('請輸入影片ID', 'error');
+                idInput.focus();
+                return;
+            }
+            
+            // 驗證YouTube影片ID格式
+            if (!/^[a-zA-Z0-9_-]{11}$/.test(id)) {
+                showMessage('YouTube影片ID格式錯誤，應為11位字符（例如：dQw4w9WgXcQ）', 'error');
+                idInput.focus();
+                return;
+            }
+            
+            // 檢查本地是否已存在
+            if (videoOptions.some(video => video.id === id)) {
+                showMessage('影片ID已存在', 'error');
+                idInput.focus();
+                return;
+            }
+            
+            // 顯示加載狀態
+            const originalBtnText = fetchBtn.textContent;
+            fetchBtn.textContent = '🔄 獲取中...';
+            fetchBtn.disabled = true;
+            
+            try {
+                // 調用後端API獲取影片標題
+                const response = await fetch(`/api/fetch-and-store-multi?action=getTitle&videoId=${id}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    // 顯示標題預覽
+                    previewVideoName.textContent = result.title;
+                    previewVideoId.textContent = `影片ID: ${id}`;
+                    titlePreview.style.display = 'block';
+                    
+                    // 儲存待確認的影片資料
+                    pendingVideoData = {
+                        id: id,
+                        name: result.title,
+                        color: selectedColor
+                    };
+                    
+                    showMessage('已獲取影片標題，請確認後點擊「確認添加」', 'info');
+                } else {
+                    showMessage(`獲取失敗: ${result.error || '未知錯誤'}`, 'error');
+                    titlePreview.style.display = 'none';
+                    pendingVideoData = null;
+                }
+            } catch (error) {
+                console.error('獲取影片標題失敗:', error);
+                showMessage(`網路錯誤: ${error.message}`, 'error');
+                titlePreview.style.display = 'none';
+                pendingVideoData = null;
+            } finally {
+                // 恢復按鈕狀態
+                fetchBtn.textContent = originalBtnText;
+                fetchBtn.disabled = false;
+            }
         }
         
-        // 成功添加到後端，更新本地
-        const newVideo = {
-            id: id,
-            name: name,
-            color: color,
-            description: `${name} - YouTube影片播放量追蹤`
-        };
+        // 【新增】確認添加影片
+        async function confirmAddVideo() {
+            if (!pendingVideoData) {
+                showMessage('沒有待確認的影片資料', 'error');
+                return;
+            }
+            
+            const id = pendingVideoData.id;
+            const name = pendingVideoData.name;
+            const color = pendingVideoData.color;
+            const addBtn = document.getElementById('addVideoBtn');
+            const confirmBtn = document.getElementById('confirmAddBtn');
+            const cancelBtn = document.getElementById('cancelAddBtn');
+            const titlePreview = document.getElementById('titlePreview');
+            
+            // 禁用按鈕防止重複點擊
+            addBtn.disabled = true;
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = '添加中...';
+            cancelBtn.disabled = true;
+            
+            try {
+                // 添加到後端
+                const backendResult = await addVideoToBackend({
+                    id: id,
+                    name: name,
+                    color: color,
+                    description: `${name} - YouTube影片播放量追蹤`
+                });
+                
+                if (!backendResult.success) {
+                    showMessage(`後端添加失敗: ${backendResult.error}`, 'error');
+                    return;
+                }
+                
+                // 成功添加到後端，更新本地
+                const newVideo = {
+                    id: id,
+                    name: name,
+                    color: color,
+                    description: `${name} - YouTube影片播放量追蹤`
+                };
+                
+                videoOptions.push(newVideo);
+                saveVideoList(); // 保存到本地storage
+                
+                // 清空輸入框和預覽
+                document.getElementById('newVideoId').value = '';
+                titlePreview.style.display = 'none';
+                pendingVideoData = null;
+                
+                // 更新UI
+                updateVideoSelector();
+                updateCompareCheckboxes();
+                showMessage(`影片 "${name}" 已成功添加`, 'success');
+                loadVideoList();
+                
+                // 自動選擇新添加的影片
+                document.getElementById('videoSelect').value = id;
+                currentVideoId = id;
+                currentVideoColor = color;
+                localStorage.setItem('selectedVideoId', id);
+                updateVideoInfo();
+                loadChartData();
+                
+            } catch (error) {
+                console.error('添加影片失敗:', error);
+                showMessage(`添加失敗: ${error.message}`, 'error');
+            } finally {
+                // 恢復按鈕狀態
+                addBtn.disabled = false;
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = '確認添加';
+                cancelBtn.disabled = false;
+            }
+        }
         
-        videoOptions.push(newVideo);
-        saveVideoList(); // 保存到本地storage
+        // 【新增】取消添加
+        function cancelAddVideo() {
+            document.getElementById('titlePreview').style.display = 'none';
+            pendingVideoData = null;
+            showMessage('已取消添加', 'info');
+        }
         
-        // 清空輸入框
-        nameInput.value = '';
-        idInput.value = '';
-        
-        // 更新UI
-        updateVideoSelector();
-        updateCompareCheckboxes();
-        showMessage(`影片 "${name}" 已成功添加`, 'success');
-        loadVideoList();
-        
-        // 自動選擇新添加的影片
-        document.getElementById('videoSelect').value = id;
-        currentVideoId = id;
-        currentVideoColor = color;
-        localStorage.setItem('selectedVideoId', id);
-        updateVideoInfo();
-        loadChartData();
-        
-    } finally {
-        // 恢復按鈕狀態
-        document.getElementById('addVideoBtn').textContent = originalButtonText;
-        document.getElementById('addVideoBtn').disabled = false;
-    }
-}
+        // 【修改】現有的 addNewVideo 函數（保留向後兼容）
+        function addNewVideo() {
+            // 舊版直接添加功能現在會提示用戶使用新流程
+            showMessage('請先點擊「獲取標題」按鈕自動獲取影片名稱', 'info');
+            document.getElementById('newVideoId').focus();
+        }
         
         // 【修改】現有的 editVideo 函數，加入後端同步
 async function editVideo(index) {
