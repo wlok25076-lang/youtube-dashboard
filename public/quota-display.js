@@ -46,6 +46,19 @@ class QuotaDisplay {
         
         try {
             const response = await fetch(endpoint);
+            
+            if (!response.ok) {
+                console.error('配額API返回錯誤:', response.status);
+                // 使用默認值
+                this.quota = {
+                    usage: 0,
+                    limit: 10000,
+                    percentage: 0,
+                    resetTime: { hours: 24, minutes: 0 }
+                };
+                return true;
+            }
+            
             const data = await response.json();
             
             // 處理新格式 /api/quota-status 返回
@@ -91,10 +104,26 @@ class QuotaDisplay {
                 
                 return true;
             }
-            return false;
+            
+            // API 返回 success: false 或其他情況，使用默認值
+            console.warn('配額API返回異常數據，使用默認值');
+            this.quota = {
+                usage: 0,
+                limit: 10000,
+                percentage: 0,
+                resetTime: { hours: 24, minutes: 0 }
+            };
+            return true;
         } catch (error) {
             console.error('獲取配額狀態失敗:', error);
-            return false;
+            // 使用默認值，不返回 false 以避免顯示錯誤
+            this.quota = {
+                usage: 0,
+                limit: 10000,
+                percentage: 0,
+                resetTime: { hours: 24, minutes: 0 }
+            };
+            return true;
         }
     }
     
@@ -197,10 +226,13 @@ class QuotaDisplay {
     renderCompact() {
         const { usage, limit, percentage, resetTime } = this.quota;
         
+        // 【新增】確保 resetTime 有效
+        const safeResetTime = resetTime || { hours: 0, minutes: 0 };
+        
         // 格式化時間
-        const resetTimeText = resetTime.hours > 0 
-            ? `${resetTime.hours} 小時 ${resetTime.minutes} 分鐘`
-            : `${resetTime.minutes} 分鐘`;
+        const resetTimeText = safeResetTime.hours > 0 
+            ? `${safeResetTime.hours} 小時 ${safeResetTime.minutes} 分鐘`
+            : `${safeResetTime.minutes} 分鐘`;
         
         // 計算狀態顏色
         const isDanger = percentage >= 95;

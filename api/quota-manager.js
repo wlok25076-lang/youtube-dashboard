@@ -209,9 +209,10 @@ export async function trackApiUsage(endpoint, customCost = null) {
  * @returns {Promise<Object>} 配額狀態物件
  */
 export async function getQuotaStatus() {
+    const today = getPTDateString();
+    
     // 檢查記憶體快取
     if (memoryCache && Date.now() - cacheTimestamp < CACHE_DURATION) {
-        const today = getPTDateString();
         if (memoryCache.date === today) {
             return {
                 ...memoryCache,
@@ -224,11 +225,16 @@ export async function getQuotaStatus() {
     }
 
     // 從 Gist 讀取
-    const quotaData = await readQuotaFromGist();
-    const today = getPTDateString();
+    let quotaData = null;
+    try {
+        quotaData = await readQuotaFromGist();
+    } catch (error) {
+        console.error('❌ 讀取配額數據失敗:', error);
+        // 返回初始狀態，不拋出錯誤
+    }
     
     if (!quotaData || quotaData.date !== today) {
-        // 需要重置或首次使用
+        // 需要重置或首次使用，或讀取失敗
         return {
             date: today,
             usage: 0,
