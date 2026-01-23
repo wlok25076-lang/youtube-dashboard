@@ -1,0 +1,430 @@
+/**
+ * YouTube API Quota Display Component Styles
+ * 配額顯示元件樣式
+ */
+
+/* 載入狀態 */
+.quota-display-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 20px;
+    color: var(--secondary-color, #666);
+    font-size: 14px;
+}
+
+.quota-spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(0, 112, 243, 0.2);
+    border-top-color: var(--primary-color, #0070f3);
+    border-radius: 50%;
+    animation: quota-spin 1s linear infinite;
+}
+
+@keyframes quota-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* 錯誤狀態 */
+.quota-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 15px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 8px;
+    color: #ef4444;
+    font-size: 14px;
+}
+
+.quota-error button {
+    padding: 6px 12px;
+    background: rgba(239, 68, 68, 0.2);
+    border: none;
+    border-radius: 4px;
+    color: #ef4444;
+    cursor: pointer;
+    font-size: 12px;
+    margin-left: 10px;
+    transition: background 0.2s;
+}
+
+.quota-error button:hover {
+    background: rgba(239, 68, 68, 0.3);
+}
+
+/* 配額卡片 */
+.quota-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    border-left: 4px solid var(--primary-color, #0070f3);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    margin: 15px 0;
+}
+
+/* 正常狀態 - 藍色 */
+.quota-card.quota-normal {
+    border-left-color: #0070f3;
+}
+
+.quota-card.quota-normal .quota-progress-fill {
+    background: linear-gradient(90deg, #0070f3, #3b82f6);
+}
+
+.quota-card.quota-normal .quota-text-normal {
+    color: #0070f3;
+}
+
+/* 警告狀態 - 黃色 */
+.quota-card.quota-warning {
+    border-left-color: #f59e0b;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, white 100%);
+}
+
+.quota-card.quota-warning .quota-progress-fill {
+    background: linear-gradient(90deg, #f59e0b, #fbbf24);
+}
+
+.quota-card.quota-warning .quota-text-warning {
+    color: #f59e0b;
+}
+
+.quota-card.quota-warning .quota-alert {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+}
+
+/* 危險狀態 - 紅色 */
+.quota-card.quota-danger {
+    border-left-color: #ef4444;
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.05) 0%, white 100%);
+}
+
+.quota-card.quota-danger .quota-progress-fill {
+    background: linear-gradient(90deg, #ef4444, #f87171);
+}
+
+.quota-card.quota-danger .quota-text-danger {
+    color: #ef4444;
+}
+
+.quota-card.quota-danger .quota-alert {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+/* 標題區 */
+.quota-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 15px;
+}
+
+.quota-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-color, #333);
+}
+
+.quota-icon {
+    width: 24px;
+    height: 24px;
+    color: var(--primary-color, #0070f3);
+}
+
+.quota-card.quota-normal .quota-icon {
+    color: #0070f3;
+}
+
+.quota-card.quota-warning .quota-icon {
+    color: #f59e0b;
+}
+
+.quota-card.quota-danger .quota-icon {
+    color: #ef4444;
+}
+
+.quota-refresh-btn {
+    background: rgba(0, 0, 0, 0.05);
+    border: none;
+    border-radius: 8px;
+    padding: 8px;
+    cursor: pointer;
+    color: var(--secondary-color, #666);
+    transition: all 0.2s;
+}
+
+.quota-refresh-btn:hover {
+    background: rgba(0, 0, 0, 0.1);
+    color: var(--primary-color, #0070f3);
+}
+
+.quota-refresh-btn svg {
+    width: 16px;
+    height: 16px;
+    display: block;
+}
+
+/* 警告訊息 */
+.quota-alert {
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* 使用量顯示 */
+.quota-usage {
+    text-align: center;
+    margin-bottom: 15px;
+}
+
+.quota-usage-value {
+    font-size: 32px;
+    font-weight: 700;
+}
+
+.quota-usage-limit {
+    font-size: 18px;
+    color: var(--secondary-color, #666);
+    margin-left: 5px;
+}
+
+.quota-percentage {
+    font-size: 14px;
+    color: var(--secondary-color, #666);
+    margin-left: 8px;
+}
+
+/* 進度條 */
+.quota-progress-container {
+    margin-bottom: 15px;
+}
+
+.quota-progress-bar {
+    height: 12px;
+    background: rgba(0, 0, 0, 0.08);
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+}
+
+.quota-progress-fill {
+    height: 100%;
+    border-radius: 6px;
+    transition: width 0.5s ease, background-color 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.quota-progress-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.25) 50%,
+        transparent 100%
+    );
+    animation: quota-shimmer 2s infinite;
+}
+
+@keyframes quota-shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+.quota-progress-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--secondary-color, #999);
+}
+
+/* 重置倒計時 */
+.quota-reset-timer {
+    text-align: center;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.03);
+    border-radius: 8px;
+    margin-bottom: 15px;
+}
+
+.quota-timer-label {
+    font-size: 12px;
+    color: var(--secondary-color, #666);
+    display: inline;
+}
+
+.quota-timer-value {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-color, #333);
+    display: block;
+    margin: 4px 0;
+}
+
+/* API 成本資訊 */
+.quota-api-costs {
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    padding-top: 12px;
+    margin-top: 12px;
+}
+
+.quota-costs-title {
+    font-size: 12px;
+    color: var(--secondary-color, #666);
+    margin-bottom: 8px;
+}
+
+.quota-cost-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    color: var(--text-color, #555);
+    padding: 4px 0;
+}
+
+.quota-cost-badge {
+    background: rgba(0, 0, 0, 0.06);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--secondary-color, #666);
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    .quota-card {
+        padding: 15px;
+        margin: 10px 0;
+    }
+    
+    .quota-usage-value {
+        font-size: 28px;
+    }
+    
+    .quota-usage-limit {
+        font-size: 16px;
+    }
+    
+    .quota-percentage {
+        display: block;
+        margin-left: 0;
+        margin-top: 4px;
+    }
+    
+    .quota-timer-value {
+        font-size: 16px;
+    }
+    
+    .quota-progress-labels {
+        font-size: 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    .quota-card {
+        padding: 12px;
+    }
+    
+    .quota-title {
+        font-size: 14px;
+    }
+    
+    .quota-usage-value {
+        font-size: 24px;
+    }
+    
+    .quota-usage-limit {
+        font-size: 14px;
+    }
+    
+    .quota-timer-value {
+        font-size: 14px;
+    }
+    
+    .quota-alert {
+        font-size: 12px;
+        padding: 8px 10px;
+    }
+}
+
+/* 深色模式支援 */
+@media (prefers-color-scheme: dark) {
+    .quota-card {
+        background: #1e1e1e;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+    
+    .quota-card.quota-warning {
+        background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, #1e1e1e 100%);
+    }
+    
+    .quota-card.quota-danger {
+        background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, #1e1e1e 100%);
+    }
+    
+    .quota-title {
+        color: #e5e5e5;
+    }
+    
+    .quota-progress-bar {
+        background: rgba(255, 255, 255, 0.1);
+    }
+    
+    .quota-usage-limit,
+    .quota-percentage,
+    .quota-timer-label,
+    .quota-costs-title,
+    .quota-cost-badge {
+        color: #a0a0a0;
+    }
+    
+    .quota-progress-labels {
+        color: #666;
+    }
+    
+    .quota-reset-timer {
+        background: rgba(255, 255, 255, 0.05);
+    }
+    
+    .quota-timer-value {
+        color: #e5e5e5;
+    }
+    
+    .quota-cost-item {
+        color: #d0d0d0;
+    }
+    
+    .quota-api-costs {
+        border-top-color: rgba(255, 255, 255, 0.1);
+    }
+    
+    .quota-refresh-btn {
+        background: rgba(255, 255, 255, 0.1);
+        color: #a0a0a0;
+    }
+    
+    .quota-refresh-btn:hover {
+        background: rgba(255, 255, 255, 0.15);
+    }
+}

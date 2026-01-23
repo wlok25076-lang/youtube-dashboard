@@ -8,6 +8,9 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <script src="https://cdn.jsdelivr.net/npm/date-fns@3.6.0/dist/date-fns.min.js"></script>
+    <!-- Quota Display Component Styles -->
+    <link rel="stylesheet" href="quota-display.css">
+    
     <style>
         :root {
             --primary-color: #0070f3;
@@ -1022,6 +1025,9 @@
     </style>
 </head>
 <body>
+    <!-- Quota Display Container -->
+    <div id="quotaDisplayContainer"></div>
+    
     <div class="container">
         <h1>📊 YouTube 多影片播放量追蹤儀表板</h1>
         
@@ -1250,6 +1256,9 @@
         </div>
     </div>
 
+    <!-- Quota Display Component -->
+    <script src="quota-display.js"></script>
+    
     <script>
         // ==================== 全局变量 ====================
         let chart = null;
