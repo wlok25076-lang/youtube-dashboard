@@ -163,45 +163,55 @@ async function updateQuotaGist(quotaData, retries = 3) {
 export async function trackApiUsage(endpoint, customCost = null) {
     const cost = customCost ?? API_COSTS[endpoint] ?? 1;
     const timestamp = new Date().toISOString();
-    
-    // 嘗試從 Gist 讀取當前配額
-    let quotaData = await readQuotaFromGist();
-    
     const today = getPTDateString();
     
-    // 檢查是否需要重置
-    if (!quotaData || quotaData.date !== today) {
-        quotaData = {
+    try {
+        // 嘗試從 Gist 讀取當前配額
+        let quotaData = await readQuotaFromGist();
+        
+        // 檢查是否需要重置
+        if (!quotaData || quotaData.date !== today) {
+            quotaData = {
+                date: today,
+                usage: 0,
+                calls: []
+            };
+        }
+
+        // 新增這次呼叫
+        const newCall = {
+            timestamp,
+            endpoint,
+            cost
+        };
+        
+        quotaData.usage += cost;
+        quotaData.calls.push(newCall);
+        
+        // 更新記憶體快取
+        memoryCache = quotaData;
+        cacheTimestamp = Date.now();
+        
+        // 非同步更新 Gist（不阻塞主流程）
+        updateQuotaGist(quotaData).then(success => {
+            if (!success) {
+                console.warn('⚠️ 無法更新配額到 Gist，稍後將使用本地記錄');
+            }
+        }).catch(err => {
+            console.warn('⚠️ 配額 Gist 更新失敗（背景任務）:', err.message);
+        });
+        
+        return quotaData;
+    } catch (error) {
+        // 確保即使出錯也返回有效的配額狀態
+        console.warn('⚠️ 配額追蹤發生錯誤，返回本地狀態:', error.message);
+        return {
             date: today,
-            usage: 0,
-            calls: []
+            usage: cost, // 至少記錄這次調用的成本
+            calls: [{ timestamp, endpoint, cost }],
+            error: error.message
         };
     }
-
-    // 新增這次呼叫
-    const newCall = {
-        timestamp,
-        endpoint,
-        cost
-    };
-    
-    quotaData.usage += cost;
-    quotaData.calls.push(newCall);
-    
-    // 更新記憶體快取
-    memoryCache = quotaData;
-    cacheTimestamp = Date.now();
-    
-    // 非同步更新 Gist（不阻塞主流程）
-    updateQuotaGist(quotaData).then(success => {
-        if (!success) {
-            console.warn('⚠️ 無法更新配額到 Gist，稍後將使用本地記錄');
-        }
-    }).catch(err => {
-        console.error('❌ 更新配額時發生錯誤:', err.message);
-    });
-    
-    return quotaData;
 }
 
 /**
