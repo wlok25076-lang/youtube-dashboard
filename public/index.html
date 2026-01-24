@@ -391,16 +391,26 @@
             }
             
             .stats-grid {
-                grid-template-columns: 1fr;
-                gap: 15px;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+                margin: 15px 0;
             }
             
             .stat-card {
-                padding: 20px;
+                padding: 12px;
+                border-radius: 8px;
+            }
+            
+            .stat-card h3 {
+                font-size: 11px;
+                margin: 0 0 6px 0;
+                letter-spacing: 0.3px;
             }
             
             .stat-card .value {
-                font-size: 26px;
+                font-size: 20px;
+                margin: 0;
+                line-height: 1.2;
             }
             
             #chartContainer, #dataTableContainer {
@@ -422,20 +432,127 @@
         }
         
         @media (max-width: 480px) {
+            body {
+                padding: 8px;
+            }
+            
+            .container {
+                padding: 12px;
+                border-radius: 8px;
+            }
+            
+            h1 {
+                font-size: 1.2rem;
+            }
+            
+            .video-controls {
+                padding: 12px;
+                border-radius: 8px;
+            }
+            
+            .video-selector select {
+                font-size: 13px;
+                padding: 8px 10px;
+            }
+            
+            button {
+                padding: 8px 15px;
+                font-size: 13px;
+                min-width: auto;
+            }
+            
+            #refreshButton .button-text,
+            #manageToggle,
+            #compareToggle,
+            #exportData {
+                font-size: 12px;
+            }
+            
             #viewChart {
-                height: 250px !important;
+                height: 220px !important;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 8px;
+                margin: 12px 0;
+            }
+            
+            .stat-card {
+                padding: 10px 8px;
+                border-radius: 6px;
+            }
+            
+            .stat-card h3 {
+                font-size: 10px;
+                margin: 0 0 4px 0;
             }
             
             .stat-card .value {
-                font-size: 24px;
-            }
-            
-            .video-info h3 {
                 font-size: 16px;
             }
             
+            #chartContainer, #dataTableContainer {
+                padding: 12px;
+                margin: 15px auto;
+                border-radius: 8px;
+            }
+            
+            .video-info {
+                padding: 10px;
+                border-radius: 6px;
+            }
+            
+            .video-info h3 {
+                font-size: 14px;
+                margin: 0 0 5px 0;
+            }
+            
             .video-info p {
+                font-size: 12px;
+                margin: 0 0 8px 0;
+            }
+            
+            #currentVideoLink {
+                font-size: 12px;
+            }
+            
+            .controls {
+                padding: 10px;
+                margin: 15px 0;
+                gap: 10px;
+            }
+            
+            .auto-refresh-control {
+                gap: 8px;
+            }
+            
+            .auto-refresh-control label {
                 font-size: 13px;
+            }
+            
+            #refreshInterval {
+                font-size: 12px;
+                padding: 6px 10px;
+            }
+            
+            .refresh-info {
+                font-size: 11px;
+                padding: 3px 6px;
+            }
+            
+            #status {
+                font-size: 12px;
+                padding: 8px;
+                margin: 15px 0;
+            }
+            
+            table {
+                font-size: 12px;
+            }
+            
+            th, td {
+                padding: 6px 4px;
             }
         }
         
