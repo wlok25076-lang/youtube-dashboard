@@ -289,7 +289,8 @@
         
         th, td {
             border: 1px solid var(--border-color);
-            padding: 6px 6px;
+            padding-block: 6px;
+            padding-inline: 2px;
             text-align: center;
             white-space: nowrap;
         }
@@ -419,8 +420,11 @@
                 line-height: 1.2;
             }
             
-            th, td {
-                padding: 5px 5px;
+            th, td,
+            #compareTable th,
+            #compareTable td {
+                padding-block: 5px;
+                padding-inline: 2px;
             }
         }
         
@@ -528,8 +532,11 @@
                 font-size: 12px;
             }
             
-            th, td {
-                padding: 6px 4px;
+            th, td,
+            #compareTable th,
+            #compareTable td {
+                padding-block: 5px;
+                padding-inline: 2px;
             }
         }
         
@@ -749,9 +756,11 @@
             top: 0;
         }
         
+        #compareTable th,
         #compareTable td {
             text-align: center;
-            padding: 10px;
+            padding-block: 6px;
+            padding-inline: 2px;
         }
         
         #compareTable tr:nth-child(even) {
