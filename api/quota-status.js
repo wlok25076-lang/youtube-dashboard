@@ -2,6 +2,7 @@
 /**
  * 配額狀態 API 端點
  * 提供當前 YouTube API 配額使用狀態給前端顯示
+ * 返回格式與 fetch-and-store-multi.js?action=quota 保持一致
  */
 
 import { getQuotaStatus } from './quota-manager.js';
@@ -33,22 +34,23 @@ export default async function handler(req, res) {
         const now = new Date();
         const resetDate = new Date(now.getTime() + resetTime.totalMilliseconds);
 
-        // 返回符合前端預期的格式
+        // 【修改】返回與 fetch-and-store-multi.js 相同的格式
         const response = {
             success: true,
-            data: {
-                used: quotaStatus.usage,          // 當前使用量
-                total: quotaStatus.limit,         // 總配額限制 (10000)
-                resetDate: resetDate.toISOString(), // 重置時間 ISO 格式
+            quota: {                              // 使用 quota 而非 data
+                date: quotaStatus.date,           // 當前日期 (PT)
+                usage: quotaStatus.usage,         // 當前使用量 (匹配 fetch-and-store-multi.js)
+                limit: quotaStatus.limit,         // 總配額限制 (10000)
                 percentage: quotaStatus.percentage, // 使用百分比
                 remaining: quotaStatus.remaining,   // 剩餘配額
-                date: quotaStatus.date,            // 當前日期 (PT)
-                callsCount: quotaStatus.calls?.length || 0, // API 調用次數
+                calls: quotaStatus.calls || [],     // API 調用記錄
+                resetDate: resetDate.toISOString(), // 重置時間 ISO 格式
                 resetTime: {
                     hours: resetTime.hours,
                     minutes: resetTime.minutes
                 }
-            }
+            },
+            timestamp: new Date().toISOString()
         };
         
         console.log('✅ [quota-status] 成功返回配額數據:', response);
@@ -63,16 +65,17 @@ export default async function handler(req, res) {
         
         return res.status(200).json({
             success: true, // 使用 true 避免前端顯示錯誤
-            data: {
-                used: 0,
-                total: 10000,
-                resetDate: fallbackResetDate.toISOString(),
+            quota: {
+                date: new Date().toISOString().split('T')[0],
+                usage: 0,
+                limit: 10000,
                 percentage: '0.00',
                 remaining: 10000,
-                date: new Date().toISOString().split('T')[0],
-                callsCount: 0,
+                calls: [],
+                resetDate: fallbackResetDate.toISOString(),
                 error: error.message // 記錄錯誤但不阻斷顯示
-            }
+            },
+            timestamp: new Date().toISOString()
         });
     }
 }
