@@ -437,9 +437,18 @@
                 line-height: 1.2;
             }
             
-            #chartContainer, #dataTableContainer {
+            #chartContainer {
                 padding: 15px;
                 margin: 20px auto;
+            }
+            
+            /* 表格容器：增加 padding、保留滑動、優化捲動體驗 */
+            #dataTableContainer {
+                padding: 18px 16px;
+                margin: 20px auto;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                scroll-padding-inline: 12px;
             }
             
             #viewChart {
@@ -458,19 +467,19 @@
                 padding-inline: 2px;
             }
             
-            /* Mobile: 表格貼內容 + 可左右滑動 + padding 合理 (375px) */
+            /* Mobile: 表格本體 margin 留白 */
             #dataTable, #compareTable {
                 width: max-content;
                 min-width: max-content;
                 display: inline-table;
                 table-layout: auto;
-                margin-inline: auto;   /* 令表格本體置中 */
+                margin-inline: 12px;
             }
             
+            /* Mobile: 表格 cell padding */
             #dataTable th, #dataTable td,
             #compareTable th, #compareTable td {
-                padding-block: 8px;    /* 原本 6px -> 8px */
-                padding-inline: 6px;   /* 原本 4px -> 6px */
+                padding: 10px 8px;
                 text-align: center;
             }
         }
@@ -538,8 +547,15 @@
                 font-size: 16px;
             }
             
-            #chartContainer, #dataTableContainer {
+            #chartContainer {
                 padding: 12px;
+                margin: 15px auto;
+                border-radius: 8px;
+            }
+            
+            /* 表格容器：更小的 padding */
+            #dataTableContainer {
+                padding: 14px 12px;
                 margin: 15px auto;
                 border-radius: 8px;
             }
