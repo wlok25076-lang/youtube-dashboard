@@ -123,22 +123,6 @@ async function saveUserVideoConfig(videos) {
     }
 
     try {
-        // 先讀取現有Gist
-        const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-            headers: {
-                'Authorization': `token ${GITHUB_TOKEN}`,
-                'User-Agent': 'vercel-app'
-            }
-        });
-
-        if (!response.ok) {
-            console.error(`❌ 無法讀取Gist: ${response.status}`);
-            return false;
-        }
-
-        const gistData = await response.json();
-        const filesToUpdate = { ...gistData.files };
-        
         // 準備影片配置
         const configFileName = 'youtube-videos-config.json';
         const videosArray = videos.map(video => ({
@@ -150,12 +134,9 @@ async function saveUserVideoConfig(videos) {
             publishDate: video.publishDate || video.startDate || new Date().toISOString().split('T')[0]
         }));
         
-        // 更新或新增配置檔案
-        filesToUpdate[configFileName] = {
-            content: JSON.stringify(videosArray, null, 2)
-        };
+        console.log(`💾 準備儲存 ${videos.length} 個影片配置...`);
         
-        // 更新Gist
+        // ✅ 只更新配置檔案，不讀取其他檔案，避免與 fetch-and-store-multi.js 產生 409 衝突
         const updateResponse = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
             method: 'PATCH',
             headers: {
@@ -165,12 +146,17 @@ async function saveUserVideoConfig(videos) {
             },
             body: JSON.stringify({
                 description: `YouTube追蹤影片配置，最後更新: ${new Date().toISOString()}`,
-                files: filesToUpdate
+                files: {
+                    [configFileName]: {
+                        content: JSON.stringify(videosArray, null, 2)
+                    }
+                }
             })
         });
 
         if (!updateResponse.ok) {
-            console.error(`❌ 更新Gist失敗: ${updateResponse.status}`);
+            const errorText = await updateResponse.text();
+            console.error(`❌ 更新Gist失敗: ${updateResponse.status} - ${errorText.substring(0, 100)}`);
             return false;
         }
         
