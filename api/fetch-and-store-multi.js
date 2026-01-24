@@ -477,27 +477,107 @@ export default async function handler(req, res) {
             console.log(`\n⚠️ 以下 ${failedVideoIds.length} 個影片獲取失敗:`, failedVideoIds);
         }
         
-        // 5. 批量更新所有檔案到Gist
-        console.log(`\n📤 更新 Gist (${Object.keys(filesToUpdate).length} 個檔案)...`);
-        const updateResponse = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-            method: 'PATCH',
-            headers: {
-                'Authorization': `token ${GITHUB_TOKEN}`,
-                'Content-Type': 'application/json',
-                'User-Agent': 'Vercel-YouTube-Multi-Tracker'
-            },
-            body: JSON.stringify({
-                description: `YouTube 多影片追蹤數據 (${ALL_VIDEO_IDS.length} 個影片)，最後更新: ${new Date().toISOString()}`,
-                files: filesToUpdate
-            })
-        });
+        // 5. 逐一更新每個檔案到Gist（避免 409 衝突）
+        console.log(`\n📤 逐一更新 Gist 檔案 (${Object.keys(filesToUpdate).length} 個)...`);
         
-        if (!updateResponse.ok) {
-            const errorText = await updateResponse.text();
-            throw new Error(`Gist 更新失敗: ${updateResponse.status} - ${errorText.substring(0, 200)}`);
+        const updateErrors = [];
+        let successfulUpdates = 0;
+        const fileEntries = Object.entries(filesToUpdate);
+        const totalFiles = fileEntries.length;
+        
+        for (const [fileName, fileContent] of fileEntries) {
+            try {
+                console.log(`   📝 更新檔案 (${successfulUpdates + 1}/${totalFiles}): ${fileName}`);
+                
+                const updateResponse = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `token ${GITHUB_TOKEN}`,
+                        'Content-Type': 'application/json',
+                        'User-Agent': 'Vercel-YouTube-Multi-Tracker'
+                    },
+                    body: JSON.stringify({
+                        description: `YouTube 多影片追蹤數據，最後更新: ${new Date().toISOString()}`,
+                        files: {
+                            [fileName]: fileContent
+                        }
+                    })
+                });
+                
+                if (!updateResponse.ok) {
+                    const errorText = await updateResponse.text();
+                    // 409 衝突錯誤的特別處理
+                    if (updateResponse.status === 409) {
+                        console.warn(`   ⚠️ ${fileName}: 409 衝突，嘗試重新獲取並重試...`);
+                        
+                        // 重新獲取 Gist 並重試一次
+                        const retryResponse = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+                            headers: {
+                                'Authorization': `token ${GITHUB_TOKEN}`,
+                                'User-Agent': 'Vercel-YouTube-Multi-Tracker'
+                            }
+                        });
+                        
+                        if (retryResponse.ok) {
+                            // 再次嘗試更新
+                            const retryUpdateResponse = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+                                method: 'PATCH',
+                                headers: {
+                                    'Authorization': `token ${GITHUB_TOKEN}`,
+                                    'Content-Type': 'application/json',
+                                    'User-Agent': 'Vercel-YouTube-Multi-Tracker'
+                                },
+                                body: JSON.stringify({
+                                    description: `YouTube 多影片追蹤數據，最後更新: ${new Date().toISOString()}`,
+                                    files: {
+                                        [fileName]: fileContent
+                                    }
+                                })
+                            });
+                            
+                            if (retryUpdateResponse.ok) {
+                                console.log(`   ✅ ${fileName} 重試更新成功`);
+                                successfulUpdates++;
+                            } else {
+                                const retryErrorText = await retryUpdateResponse.text();
+                                throw new Error(`${fileName}: ${retryUpdateResponse.status} - ${retryErrorText.substring(0, 100)}`);
+                            }
+                        } else {
+                            throw new Error(`${fileName}: 無法重新獲取 Gist`);
+                        }
+                    } else {
+                        const errorMsg = `${fileName}: ${updateResponse.status} - ${errorText.substring(0, 100)}`;
+                        console.error(`   ❌ ${errorMsg}`);
+                        updateErrors.push(errorMsg);
+                    }
+                } else {
+                    console.log(`   ✅ ${fileName} 更新成功`);
+                    successfulUpdates++;
+                }
+                
+                // 避免觸發 GitHub API rate limit，每次更新後等待 200ms
+                if (totalFiles > 1) {
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                }
+                
+            } catch (error) {
+                const errorMsg = `${fileName}: ${error.message}`;
+                console.error(`   ❌ ${errorMsg}`);
+                updateErrors.push(errorMsg);
+            }
         }
         
-        console.log(`✅ Gist 更新成功`);
+        // 統計更新結果
+        console.log(`\n📊 Gist 檔案更新統計:`);
+        console.log(`   ✅ 成功: ${successfulUpdates}/${totalFiles}`);
+        console.log(`   ❌ 失敗: ${updateErrors.length}`);
+        
+        if (updateErrors.length > 0) {
+            console.error(`\n⚠️ 有 ${updateErrors.length} 個檔案更新失敗:`, updateErrors);
+            throw new Error(`部分 Gist 檔案更新失敗: ${updateErrors.join('; ')}`);
+        }
+        
+        console.log(`✅ 所有 Gist 檔案更新成功`);
         
         // 6. 成功回應
         const successful = results.filter(r => r.success).length;
