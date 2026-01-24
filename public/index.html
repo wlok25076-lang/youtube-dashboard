@@ -119,6 +119,25 @@
             background: var(--card-bg);
         }
         
+        /* ========== 【新增】緊湊型按鈕組 ========== */
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: nowrap;
+        }
+        
+        .btn-action {
+            padding: 8px 12px;
+            min-width: auto;
+            font-size: 14px;
+            flex: 0 1 auto;
+            white-space: nowrap;
+        }
+        
+        .btn-action .button-text {
+            font-size: 13px;
+        }
+        
         .video-info {
             padding: 15px;
             background: var(--card-bg);
@@ -187,29 +206,6 @@
         
         button:active {
             transform: translateY(0);
-        }
-        
-        .auto-refresh-control {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-        
-        .auto-refresh-control label {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            cursor: pointer;
-        }
-        
-        .refresh-info {
-            font-size: 0.9em;
-            color: var(--secondary-color);
-            background: rgba(0,0,0,0.05);
-            padding: 4px 8px;
-            border-radius: 4px;
         }
         
         /* ========== 数据统计卡片 ========== */
@@ -385,9 +381,15 @@
                 width: 100%;
             }
             
-            .auto-refresh-control {
-                flex-direction: column;
-                align-items: flex-start;
+            .action-buttons {
+                width: 100%;
+                justify-content: center;
+            }
+            
+            .btn-action {
+                flex: 1;
+                text-align: center;
+                justify-content: center;
             }
             
             .stats-grid {
@@ -456,15 +458,17 @@
             }
             
             button {
-                padding: 8px 15px;
-                font-size: 13px;
+                padding: 8px 12px;
+                font-size: 12px;
                 min-width: auto;
             }
             
-            #refreshButton .button-text,
-            #manageToggle,
-            #compareToggle,
-            #exportData {
+            .btn-action {
+                padding: 8px 10px;
+                font-size: 12px;
+            }
+            
+            .btn-action .button-text {
                 font-size: 12px;
             }
             
@@ -521,24 +525,6 @@
                 padding: 10px;
                 margin: 15px 0;
                 gap: 10px;
-            }
-            
-            .auto-refresh-control {
-                gap: 8px;
-            }
-            
-            .auto-refresh-control label {
-                font-size: 13px;
-            }
-            
-            #refreshInterval {
-                font-size: 12px;
-                padding: 6px 10px;
-            }
-            
-            .refresh-info {
-                font-size: 11px;
-                padding: 3px 6px;
             }
             
             #status {
@@ -1241,16 +1227,18 @@
                 <select id="videoSelect">
                     <!-- 選項會動態生成 -->
                 </select>
-                <button id="refreshButton">
-                    <span class="button-text">🔄 刷新數據</span>
-                    <span class="loading hidden"></span>
-                </button>
-                <button id="manageToggle" class="secondary-btn">
-                    🎬 管理影片
-                </button>
-                <button id="compareToggle" class="secondary-btn">
-                    📊 比較模式
-                </button>
+                <div class="action-buttons">
+                    <button id="refreshButton" class="btn-action">
+                        <span class="button-text">🔄 刷新</span>
+                        <span class="loading hidden"></span>
+                    </button>
+                    <button id="manageToggle" class="btn-action secondary-btn">
+                        🎬 管理
+                    </button>
+                    <button id="compareToggle" class="btn-action secondary-btn">
+                        📊 比較
+                    </button>
+                </div>
             </div>
             
             <!-- 比較模式控制面板 -->
@@ -1321,25 +1309,11 @@
             </div>
         </div>
         
-        <!-- 控制区域 -->
+        <!-- 控制区域 - 只保留導出按鈕 -->
         <div class="controls">
-            <div class="auto-refresh-control">
-                <label>
-                    <input type="checkbox" id="autoRefreshCheckbox">
-                    ⚡ 自動刷新
-                </label>
-                <select id="refreshInterval">
-                    <option value="1">每1分鐘</option>
-                    <option value="5">每5分鐘</option>
-                    <option value="15">每15分鐘</option>
-                    <option value="30">每30分鐘</option>
-                    <option value="60" selected>每60分鐘</option>
-                </select>
-                <span class="refresh-info" id="nextRefreshInfo"></span>
-                <button id="exportData" class="secondary-btn">
-                    📥 導出數據
-                </button>
-            </div>
+            <button id="exportData" class="primary-btn">
+                📥 導出數據
+            </button>
         </div>
         
         <!-- 状态信息 -->
@@ -1402,8 +1376,6 @@
     <script>
         // ==================== 全局变量 ====================
         let chart = null;
-        let autoRefreshInterval = null;
-        let isAutoRefreshEnabled = false;
         let lastUpdateTime = null;
         const statusDiv = document.getElementById('status');
         const dataTableBody = document.querySelector('#dataTable tbody');
@@ -2570,11 +2542,6 @@ async function updateVideoInBackend(videoData) {
                 
                 const totalRecords = apiStats ? apiStats.summary?.totalRecords : data.length;
                 statusDiv.innerHTML = `✅ 影片 ${currentVideoId} 數據已更新: ${lastUpdateTime.toLocaleDateString()} ${timeStr} | 共 ${totalRecords} 筆記錄`;
-                
-                // 如果有自動刷新，更新下次刷新時間
-                if (isAutoRefreshEnabled) {
-                    updateNextRefreshTime();
-                }
 
             } catch (error) {
                 console.error('獲取圖表數據失敗:', error);
@@ -3272,106 +3239,12 @@ async function updateVideoInBackend(videoData) {
             }
         }
         
-        // ==================== 自動刷新功能 ====================
-        function setupAutoRefresh() {
-            const checkbox = document.getElementById('autoRefreshCheckbox');
-            const intervalSelect = document.getElementById('refreshInterval');
-            
-            const savedSetting = localStorage.getItem('autoRefreshEnabled');
-            if (savedSetting === 'true') {
-                checkbox.checked = true;
-                isAutoRefreshEnabled = true;
-                startAutoRefresh();
-            }
-            
-            const savedInterval = localStorage.getItem('refreshInterval');
-            if (savedInterval) {
-                intervalSelect.value = savedInterval;
-            }
-            
-            checkbox.addEventListener('change', function(e) {
-                isAutoRefreshEnabled = e.target.checked;
-                localStorage.setItem('autoRefreshEnabled', isAutoRefreshEnabled);
-                
-                if (isAutoRefreshEnabled) {
-                    startAutoRefresh();
-                } else {
-                    stopAutoRefresh();
-                    document.getElementById('nextRefreshInfo').textContent = '';
-                }
-            });
-            
-            intervalSelect.addEventListener('change', function() {
-                localStorage.setItem('refreshInterval', this.value);
-                if (isAutoRefreshEnabled) {
-                    startAutoRefresh();
-                }
-            });
-        }
-        
-        function startAutoRefresh() {
-            if (autoRefreshInterval) {
-                clearInterval(autoRefreshInterval);
-            }
-            
-            const minutes = parseInt(document.getElementById('refreshInterval').value);
-            const intervalMs = minutes * 60 * 1000;
-            
-            console.log(`✅ 自動刷新已啟用: 每 ${minutes} 分鐘`);
-            
-            loadChartData();
-            
-            autoRefreshInterval = setInterval(() => {
-                console.log(`🔄 自動刷新執行於 ${new Date().toLocaleTimeString()}`);
-                loadChartData();
-            }, intervalMs);
-            
-            updateNextRefreshTime();
-        }
-        
-        function stopAutoRefresh() {
-            if (autoRefreshInterval) {
-                clearInterval(autoRefreshInterval);
-                autoRefreshInterval = null;
-            }
-            console.log('⏹️ 自動刷新已停止');
-        }
-        
-        function updateNextRefreshTime() {
-            const nextRefreshEl = document.getElementById('nextRefreshInfo');
-            if (!nextRefreshEl || !isAutoRefreshEnabled) return;
-            
-            const minutes = parseInt(document.getElementById('refreshInterval').value);
-            const nextTime = new Date(Date.now() + minutes * 60 * 1000);
-            const timeStr = nextTime.toLocaleTimeString('zh-TW', { 
-                hour: '2-digit', 
-                minute: '2-digit',
-                hour12: false 
-            });
-            nextRefreshEl.textContent = `下次刷新: ${timeStr}`;
-        }
-        
         // ==================== 事件監聽器 ====================
         document.getElementById('refreshButton').addEventListener('click', loadChartData);
         
         window.addEventListener('resize', function() {
             if (chart) {
                 chart.resize();
-            }
-        });
-        
-        window.addEventListener('beforeunload', function() {
-            stopAutoRefresh();
-        });
-        
-        document.addEventListener('visibilitychange', function() {
-            if (document.hidden) {
-                if (autoRefreshInterval) {
-                    clearInterval(autoRefreshInterval);
-                    autoRefreshInterval = null;
-                }
-            } else if (isAutoRefreshEnabled) {
-                startAutoRefresh();
             }
         });
 
@@ -4082,7 +3955,7 @@ function setupCompareMode() {
             }, 100);
         }
         
-// ==================== 【修改】初始化 ====================
+        // ==================== 【修改】初始化 ====================
 document.addEventListener('DOMContentLoaded', function() {
     // 首先初始化影片選擇器和配置
     setupVideoSelector().then(() => {
@@ -4090,7 +3963,6 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // 【重要】確保影片列表已載入後，再初始化比較模式
         setupVideoManagement(); // 初始化影片管理
-        setupAutoRefresh();     // 初始化自動刷新
         setupPasswordVerification(); // 【新增】初始化密碼驗證
         
         // 【關鍵修復】先載入影片列表，再初始化比較模式
@@ -4111,12 +3983,6 @@ document.addEventListener('DOMContentLoaded', function() {
         console.error('初始化失敗:', error);
         statusDiv.innerHTML = `❌ 初始化失敗: ${error.message}`;
     });
-    
-    setInterval(() => {
-        if (isAutoRefreshEnabled) {
-            updateNextRefreshTime();
-        }
-    }, 60000);
 });
 
     </script>
