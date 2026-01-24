@@ -295,6 +295,53 @@
             white-space: nowrap;
         }
         
+        /* ===== 詳細數據表：縮到貼內容，減少空位 ===== */
+        #dataTable {
+            width: max-content;
+            min-width: max-content;
+            display: inline-table;
+            table-layout: auto;
+        }
+        
+        #dataTable th, #dataTable td {
+            padding-inline: 0px;
+            padding-block: 4px;
+        }
+        
+        #dataTable th:first-child,
+        #dataTable td:first-child {
+            text-align: left;
+        }
+        
+        #dataTable th:not(:first-child),
+        #dataTable td:not(:first-child) {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+        
+        /* ===== 比較數據表：同樣減少空位 ===== */
+        #compareTable {
+            width: max-content;
+            min-width: max-content;
+            display: inline-table;
+        }
+        
+        #compareTable th, #compareTable td {
+            padding-inline: 0px;
+            padding-block: 4px;
+        }
+        
+        #compareTable th:first-child,
+        #compareTable td:first-child {
+            text-align: left;
+        }
+        
+        #compareTable th:not(:first-child),
+        #compareTable td:not(:first-child) {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+        
         th {
             background-color: rgba(0, 112, 243, 0.08);
             font-weight: 600;
