@@ -191,16 +191,15 @@ export async function trackApiUsage(endpoint, customCost = null) {
         // 更新記憶體快取
         memoryCache = quotaData;
         cacheTimestamp = Date.now();
-        
-        // 非同步更新 Gist（不阻塞主流程）
-        updateQuotaGist(quotaData).then(success => {
-            if (!success) {
-                console.warn('⚠️ 無法更新配額到 Gist，稍後將使用本地記錄');
-            }
-        }).catch(err => {
-            console.warn('⚠️ 配額 Gist 更新失敗（背景任務）:', err.message);
-        });
-        
+
+        // ⚠️ 已停用 Gist 更新以避免與主要資料收集任務產生 409 衝突
+        // 配額追蹤改用純記憶體快取模式
+        // 優勢: 
+        //   1. 避免與 fetch-and-store-multi.js 的批量更新衝突
+        //   2. 減少不必要的 GitHub API 呼叫
+        //   3. 配額資訊在 Serverless 環境中會自然重置
+        console.log(`📊 配額追蹤 (記憶體模式): ${endpoint} +${cost} 單位, 當日累計: ${quotaData.usage}/${QUOTA_LIMIT}`);
+
         return quotaData;
     } catch (error) {
         // 確保即使出錯也返回有效的配額狀態
