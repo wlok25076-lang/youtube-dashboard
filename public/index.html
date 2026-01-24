@@ -251,11 +251,7 @@
         }
         
         .stat-card .trend {
-            margin-top: 8px;
-            font-size: 13px;
-            padding: 3px 8px;
-            border-radius: 12px;
-            display: inline-block;
+            display: none !important;  /* 完全隱藏備註元素 */
         }
         
         .trend.positive {
@@ -1239,27 +1235,22 @@
             <div class="stat-card">
                 <h3>📅 發佈日期</h3>
                 <p class="value" id="publishDate">--</p>
-                <div class="trend neutral" id="publishDateTrend">影片資訊</div>
             </div>
             <div class="stat-card">
                 <h3>🎯 當前播放量</h3>
                 <p class="value" id="currentViews">--</p>
-                <div class="trend neutral" id="currentTrend">--</div>
             </div>
             <div class="stat-card">
                 <h3>👍 當前Like數</h3>
                 <p class="value" id="currentLikes">--</p>
-                <div class="trend neutral" id="likesTrend">--</div>
             </div>
             <div class="stat-card">
                 <h3>📈 今日增長</h3>
                 <p class="value" id="todayGrowth">--</p>
-                <div class="trend neutral" id="todayTrend">--</div>
             </div>
             <div class="stat-card">
                 <h3>⏱️ 平均每小時</h3>
                 <p class="value" id="avgHourly">--</p>
-                <div class="trend neutral" id="hourlyTrend">--</div>
             </div>
         </div>
         
@@ -2477,9 +2468,9 @@ async function updateVideoInBackend(videoData) {
                 document.getElementById('todayGrowth').textContent = '--';
                 document.getElementById('avgHourly').textContent = '--';
                 
-                updateTrendElement('currentTrend', '連接失敗', 'negative');
-                updateTrendElement('todayTrend', '連接失敗', 'negative');
-                updateTrendElement('hourlyTrend', '連接失敗', 'negative');
+                // updateTrendElement('currentTrend', '連接失敗', 'negative');
+                // updateTrendElement('todayTrend', '連接失敗', 'negative');
+                // updateTrendElement('hourlyTrend', '連接失敗', 'negative');
                 
                 // 清空表格
                 dataTableBody.innerHTML = '<tr><td colspan="5">加載數據失敗，請稍後重試</td></tr>';
@@ -2504,7 +2495,7 @@ async function updateVideoInBackend(videoData) {
                 if (apiPublishDate) {
                     const formattedDate = formatDate(apiPublishDate);
                     document.getElementById('publishDate').textContent = formattedDate;
-                    updateTrendElement('publishDateTrend', '影片發佈日期', 'neutral');
+                    // updateTrendElement('publishDateTrend', '影片發佈日期', 'neutral');
                     publishDateFound = true;
                     console.log('✅ updateStatsFromAPI: 使用API返回的發佈日期:', apiPublishDate);
                 }
@@ -2515,7 +2506,7 @@ async function updateVideoInBackend(videoData) {
                 const publishDate = statistics.current.date;
                 const formattedDate = formatDate(publishDate);
                 document.getElementById('publishDate').textContent = formattedDate;
-                updateTrendElement('publishDateTrend', '影片發佈日期', 'neutral');
+                // updateTrendElement('publishDateTrend', '影片發佈日期', 'neutral');
                 
                 // 儲存到全局變量，供 updateStatsCards 使用
                 if (!window.lastAPIResponse) window.lastAPIResponse = {};
@@ -2524,7 +2515,7 @@ async function updateVideoInBackend(videoData) {
                 console.log('ℹ️ updateStatsFromAPI: 使用statistics中的日期:', publishDate);
             } else if (!publishDateFound) {
                 document.getElementById('publishDate').textContent = '--';
-                updateTrendElement('publishDateTrend', '等待API獲取', 'neutral');
+                // updateTrendElement('publishDateTrend', '等待API獲取', 'neutral');
                 console.log('⚠️ updateStatsFromAPI: 未找到發佈日期');
             }
             
@@ -2534,10 +2525,9 @@ async function updateVideoInBackend(videoData) {
                 document.getElementById('currentViews').textContent = formatNumberWithCommas(currentViews);
                 
                 // 趨勢指示器（簡化版）
-                let currentTrend = 'neutral';
-                let currentTrendText = '';
-                
-                updateTrendElement('currentTrend', currentTrendText, currentTrend);
+                // let currentTrend = 'neutral';
+                // let currentTrendText = '';
+                // updateTrendElement('currentTrend', currentTrendText, currentTrend);
             }
             
             // 當前Like數
@@ -2546,14 +2536,13 @@ async function updateVideoInBackend(videoData) {
                 document.getElementById('currentLikes').textContent = formatNumberWithCommas(currentLikes);
                 
                 // Like數趨勢指示器
-                let likesTrend = 'neutral';
-                let likesTrendText = '';
-                
-                updateTrendElement('likesTrend', likesTrendText, likesTrend);
+                // let likesTrend = 'neutral';
+                // let likesTrendText = '';
+                // updateTrendElement('likesTrend', likesTrendText, likesTrend);
             } else {
                 // 如果沒有like數據，顯示提示
                 document.getElementById('currentLikes').textContent = '--';
-                updateTrendElement('likesTrend', '無Like數據', 'neutral');
+                // updateTrendElement('likesTrend', '無Like數據', 'neutral');
             }
             
             // 今日增長
@@ -2562,10 +2551,9 @@ async function updateVideoInBackend(videoData) {
                 document.getElementById('todayGrowth').textContent = 
                     (todayChange > 0 ? '+' : '') + formatNumberWithCommas(todayChange);
                 
-                const todayTrend = todayChange > 0 ? 'positive' : todayChange < 0 ? 'negative' : 'neutral';
-                const trendText = '';
-                
-                updateTrendElement('todayTrend', trendText, todayTrend);
+                // const todayTrend = todayChange > 0 ? 'positive' : todayChange < 0 ? 'negative' : 'neutral';
+                // const trendText = '';
+                // updateTrendElement('todayTrend', trendText, todayTrend);
             }
             
             // 平均每小時
@@ -2574,10 +2562,9 @@ async function updateVideoInBackend(videoData) {
                 document.getElementById('avgHourly').textContent = 
                     (avgHourly > 0 ? '+' : '') + formatNumberWithCommas(avgHourly);
                 
-                const hourlyTrend = avgHourly > 0 ? 'positive' : avgHourly < 0 ? 'negative' : 'neutral';
-                const trendText = '';
-                
-                updateTrendElement('hourlyTrend', trendText, hourlyTrend);
+                // const hourlyTrend = avgHourly > 0 ? 'positive' : avgHourly < 0 ? 'negative' : 'neutral';
+                // const trendText = '';
+                // updateTrendElement('hourlyTrend', trendText, hourlyTrend);
             }
         }
         
@@ -2661,7 +2648,7 @@ async function updateVideoInBackend(videoData) {
                 if (apiPublishDate) {
                     const formattedDate = formatDate(apiPublishDate);
                     document.getElementById('publishDate').textContent = formattedDate;
-                    updateTrendElement('publishDateTrend', '影片發佈日期', 'neutral');
+                    // updateTrendElement('publishDateTrend', '影片發佈日期', 'neutral');
                     publishDateFound = true;
                     console.log('✅ updateStatsCards: 使用API返回的發佈日期:', apiPublishDate);
                 }
@@ -2675,7 +2662,7 @@ async function updateVideoInBackend(videoData) {
                 if (currentVideo && currentVideo.publishDate) {
                     const formattedDate = formatDate(currentVideo.publishDate);
                     document.getElementById('publishDate').textContent = formattedDate;
-                    updateTrendElement('publishDateTrend', '影片發佈日期', 'neutral');
+                    // updateTrendElement('publishDateTrend', '影片發佈日期', 'neutral');
                     publishDateFound = true;
                     console.log('ℹ️ updateStatsCards: 使用本地配置的發佈日期:', currentVideo.publishDate);
                 }
@@ -2684,7 +2671,7 @@ async function updateVideoInBackend(videoData) {
             // 如果都沒有，顯示提示而不是當前日期
             if (!publishDateFound) {
                 document.getElementById('publishDate').textContent = '--';
-                updateTrendElement('publishDateTrend', '等待API獲取', 'neutral');
+                // updateTrendElement('publishDateTrend', '等待API獲取', 'neutral');
                 console.log('⚠️ updateStatsCards: 未找到發佈日期，等待API獲取');
             }
             
@@ -2692,53 +2679,51 @@ async function updateVideoInBackend(videoData) {
             const currentViews = currentData.viewCount;
             document.getElementById('currentViews').textContent = formatNumberWithCommas(currentViews);
             
-            // 計算趨勢（與1小時前比較）
-            let currentTrend = 'neutral';
-            let currentTrendText = '穩定';
-            if (sortedData.length >= 2) {
-                const prevHourIndex = findClosestIndex(sortedData, Date.now() - 60*60*1000);
-                if (prevHourIndex >= 0) {
-                    const prevViews = sortedData[prevHourIndex].viewCount;
-                    const diff = currentViews - prevViews;
-                    if (diff > 0) {
-                        currentTrend = 'positive';
-                        currentTrendText = `↑ 比1小時前 +${formatNumberWithCommas(diff)}`;
-                    } else if (diff < 0) {
-                        currentTrend = 'negative';
-                        currentTrendText = `↓ 比1小時前 ${formatNumberWithCommas(diff)}`;
-                    }
-                }
-            }
-            updateTrendElement('currentTrend', currentTrendText, currentTrend);
+            // 計算趨勢（與1小時前比較）- 已隱藏趨勢指示器
+            // let currentTrend = 'neutral';
+            // let currentTrendText = '穩定';
+            // if (sortedData.length >= 2) {
+            //     const prevHourIndex = findClosestIndex(sortedData, Date.now() - 60*60*1000);
+            //     if (prevHourIndex >= 0) {
+            //         const prevViews = sortedData[prevHourIndex].viewCount;
+            //         const diff = currentViews - prevViews;
+            //         if (diff > 0) {
+            //             currentTrend = 'positive';
+            //             currentTrendText = `↑ 比1小時前 +${formatNumberWithCommas(diff)}`;
+            //         } else if (diff < 0) {
+            //             currentTrend = 'negative';
+            //             currentTrendText = `↓ 比1小時前 ${formatNumberWithCommas(diff)}`;
+            //         }
+            //     }
+            // }
+            // updateTrendElement('currentTrend', currentTrendText, currentTrend);
             
             // 3. 當前Like數
             if (currentData.likeCount !== undefined && currentData.likeCount !== null) {
                 const currentLikes = currentData.likeCount;
                 document.getElementById('currentLikes').textContent = formatNumberWithCommas(currentLikes);
                 
-                // Like數趨勢指示器
-                let likesTrend = 'neutral';
-                let likesTrendText = '最新數據';
-                
-                if (sortedData.length >= 2) {
-                    const prevData = sortedData[sortedData.length - 2];
-                    if (prevData.likeCount !== undefined && prevData.likeCount !== null) {
-                        const likeChange = currentLikes - prevData.likeCount;
-                        if (likeChange > 0) {
-                            likesTrend = 'positive';
-                            likesTrendText = `↑ 比上次 +${formatNumberWithCommas(likeChange)}`;
-                        } else if (likeChange < 0) {
-                            likesTrend = 'negative';
-                            likesTrendText = `↓ 比上次 ${formatNumberWithCommas(likeChange)}`;
-                        }
-                    }
-                }
-                
-                updateTrendElement('likesTrend', likesTrendText, likesTrend);
+                // Like數趨勢指示器 - 已隱藏
+                // let likesTrend = 'neutral';
+                // let likesTrendText = '最新數據';
+                // if (sortedData.length >= 2) {
+                //     const prevData = sortedData[sortedData.length - 2];
+                //     if (prevData.likeCount !== undefined && prevData.likeCount !== null) {
+                //         const likeChange = currentLikes - prevData.likeCount;
+                //         if (likeChange > 0) {
+                //             likesTrend = 'positive';
+                //             likesTrendText = `↑ 比上次 +${formatNumberWithCommas(likeChange)}`;
+                //         } else if (likeChange < 0) {
+                //             likesTrend = 'negative';
+                //             likesTrendText = `↓ 比上次 ${formatNumberWithCommas(likeChange)}`;
+                //         }
+                //     }
+                // }
+                // updateTrendElement('likesTrend', likesTrendText, likesTrend);
             } else {
                 // 如果沒有like數據，顯示提示
                 document.getElementById('currentLikes').textContent = '--';
-                updateTrendElement('likesTrend', '無Like數據', 'neutral');
+                // updateTrendElement('likesTrend', '無Like數據', 'neutral');
             }
             
             // 4. 今日增長（使用香港時間 UTC+8）
@@ -2763,7 +2748,6 @@ async function updateVideoInBackend(videoData) {
             );
             
             let todayGrowth = 0;
-            let todayTrend = 'neutral';
             let todayGrowthPercent = 0;
             
             if (todayData.length >= 2) {
@@ -2778,16 +2762,17 @@ async function updateVideoInBackend(videoData) {
                 document.getElementById('todayGrowth').textContent = 
                     (todayGrowth > 0 ? '+' : '') + formatNumberWithCommas(todayGrowth);
                 
-                todayTrend = todayGrowth > 0 ? 'positive' : todayGrowth < 0 ? 'negative' : 'neutral';
-                updateTrendElement('todayTrend', 
-                    todayGrowthPercent !== 0 ? 
-                        `今日${todayGrowth > 0 ? '增長' : '減少'} ${Math.abs(todayGrowthPercent)}%` : 
-                        `今日持平`,
-                    todayTrend
-                );
+                // 今日趨勢指示器 - 已隱藏
+                // const todayTrend = todayGrowth > 0 ? 'positive' : todayGrowth < 0 ? 'negative' : 'neutral';
+                // updateTrendElement('todayTrend', 
+                //     todayGrowthPercent !== 0 ? 
+                //         `今日${todayGrowth > 0 ? '增長' : '減少'} ${Math.abs(todayGrowthPercent)}%` : 
+                //         `今日持平`,
+                //     todayTrend
+                // );
             } else {
                 document.getElementById('todayGrowth').textContent = '--';
-                updateTrendElement('todayTrend', '數據不足', 'neutral');
+                // updateTrendElement('todayTrend', '數據不足', 'neutral');
             }
             
             // 5. 平均每小時（最近24小時）
@@ -2803,14 +2788,15 @@ async function updateVideoInBackend(videoData) {
                 document.getElementById('avgHourly').textContent = 
                     (avgHourly > 0 ? '+' : '') + formatNumberWithCommas(avgHourly);
                 
-                const hourlyTrend = avgHourly > 0 ? 'positive' : avgHourly < 0 ? 'negative' : 'neutral';
-                updateTrendElement('hourlyTrend', 
-                    avgHourly > 0 ? `穩定增長` : avgHourly < 0 ? `增長放緩` : `保持平穩`,
-                    hourlyTrend
-                );
+                // 每小時趨勢指示器 - 已隱藏
+                // const hourlyTrend = avgHourly > 0 ? 'positive' : avgHourly < 0 ? 'negative' : 'neutral';
+                // updateTrendElement('hourlyTrend', 
+                //     avgHourly > 0 ? `穩定增長` : avgHourly < 0 ? `增長放緩` : `保持平穩`,
+                //     hourlyTrend
+                // );
             } else {
                 document.getElementById('avgHourly').textContent = '--';
-                updateTrendElement('hourlyTrend', '數據不足', 'neutral');
+                // updateTrendElement('hourlyTrend', '數據不足', 'neutral');
             }
         }
         
@@ -2819,9 +2805,10 @@ async function updateVideoInBackend(videoData) {
             document.getElementById('todayGrowth').textContent = '--';
             document.getElementById('avgHourly').textContent = '--';
             
-            updateTrendElement('currentTrend', '無數據', 'neutral');
-            updateTrendElement('todayTrend', '無數據', 'neutral');
-            updateTrendElement('hourlyTrend', '無數據', 'neutral');
+            // 趨勢指示器 - 已隱藏
+            // updateTrendElement('currentTrend', '無數據', 'neutral');
+            // updateTrendElement('todayTrend', '無數據', 'neutral');
+            // updateTrendElement('hourlyTrend', '無數據', 'neutral');
         }
         
         // ==================== 【修改】圖表功能（支援動態顏色）====================
