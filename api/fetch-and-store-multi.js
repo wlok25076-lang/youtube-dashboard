@@ -248,10 +248,26 @@ export default async function handler(req, res) {
     }
 
     // 2. 生產環境認證檢查（兼容 cron-job.org）
-    if (process.env.NODE_ENV === 'production') {
+    // 【臨時】允許通過環境變數跳過認證以進行調試
+    const skipAuth = process.env.ENABLE_CRON_AUTH === 'false';
+    
+    if (process.env.NODE_ENV === 'production' && !skipAuth) {
         const authHeader = req.headers.authorization;
         const expectedHeader = `Bearer ${CRON_AUTH_TOKEN}`;
         const tokenFromQuery = req.query.token || req.query.auth;
+        
+        // 【新增】調試日誌：記錄所有接收到的請求資訊
+        console.log('🔍 認證調試資訊:', {
+            authHeader: authHeader || '(空)',
+            queryToken: tokenFromQuery || '(空)',
+            allHeaders: JSON.stringify(req.headers, null, 2),
+            allQueryParams: JSON.stringify(req.query, null, 2),
+            clientIP: req.headers['x-forwarded-for'] || req.socket?.remoteAddress,
+            userAgent: req.headers['user-agent'],
+            url: req.url,
+            method: req.method,
+            time: new Date().toISOString()
+        });
         
         // 【重要】允許兩種認證方式，兼容 cron-job.org：
         // 1. Authorization: Bearer <token> （標準方式）
@@ -268,7 +284,12 @@ export default async function handler(req, res) {
                 expectedTokenPreview: CRON_AUTH_TOKEN ? '***' + CRON_AUTH_TOKEN.substring(CRON_AUTH_TOKEN.length - 4) : '(無令牌)',
                 clientIP: req.headers['x-forwarded-for'],
                 time: new Date().toISOString(),
-                url: req.url
+                url: req.url,
+                debug: {
+                    authHeaderLength: authHeader ? authHeader.length : 0,
+                    queryTokenLength: tokenFromQuery ? tokenFromQuery.length : 0,
+                    envHasCronToken: !!CRON_AUTH_TOKEN
+                }
             });
             return res.status(401).json({ 
                 success: false,
@@ -279,10 +300,16 @@ export default async function handler(req, res) {
                     hasAuthHeader: !!authHeader,
                     hasQueryToken: !!tokenFromQuery,
                     headerLength: authHeader ? authHeader.length : 0,
-                    queryTokenLength: tokenFromQuery ? tokenFromQuery.length : 0
+                    queryTokenLength: tokenFromQuery ? tokenFromQuery.length : 0,
+                    envConfigured: !!CRON_AUTH_TOKEN
                 }
             });
         }
+        
+        console.log('✅ 認證成功，開始處理數據收集任務');
+    } else if (process.env.NODE_ENV === 'production' && skipAuth) {
+        console.log('⚠️ 警告：生產環境認證已通過 ENABLE_CRON_AUTH=false 臨時跳過');
+        console.log('   這僅用於調試，完成後請恢復認證');
     }
 
     // 3. 檢查必要環境變數
