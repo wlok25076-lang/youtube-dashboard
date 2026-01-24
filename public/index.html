@@ -308,17 +308,6 @@
             padding-inline: 6px;
         }
         
-        #dataTable th:first-child,
-        #dataTable td:first-child {
-            text-align: left;
-        }
-        
-        #dataTable th:not(:first-child),
-        #dataTable td:not(:first-child) {
-            text-align: right;
-            font-variant-numeric: tabular-nums;
-        }
-        
         /* ===== 比較數據表：Desktop 撐滿容器 ===== */
         #compareTable {
             width: 100%;
@@ -330,14 +319,10 @@
             padding-inline: 6px;
         }
         
-        #compareTable th:first-child,
-        #compareTable td:first-child {
-            text-align: left;
-        }
-        
-        #compareTable th:not(:first-child),
-        #compareTable td:not(:first-child) {
-            text-align: right;
+        /* ===== 強制置中規則 ===== */
+        #dataTable th, #dataTable td,
+        #compareTable th, #compareTable td {
+            text-align: center;
             font-variant-numeric: tabular-nums;
         }
         
@@ -479,12 +464,14 @@
                 min-width: max-content;
                 display: inline-table;
                 table-layout: auto;
+                margin-inline: auto;   /* 令表格本體置中 */
             }
             
             #dataTable th, #dataTable td,
             #compareTable th, #compareTable td {
-                padding-block: 6px;
-                padding-inline: 4px;
+                padding-block: 8px;    /* 原本 6px -> 8px */
+                padding-inline: 6px;   /* 原本 4px -> 6px */
+                text-align: center;
             }
         }
         
@@ -602,8 +589,9 @@
             /* Mobile (480px): 更緊湊的表格樣式 */
             #dataTable th, #dataTable td,
             #compareTable th, #compareTable td {
-                padding-block: 5px;
-                padding-inline: 3px;
+                padding-block: 7px;    /* 原本 5px -> 7px */
+                padding-inline: 5px;   /* 原本 3px -> 5px */
+                text-align: center;
             }
         }
         
