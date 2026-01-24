@@ -295,17 +295,17 @@
             white-space: nowrap;
         }
         
-        /* ===== 詳細數據表：縮到貼內容，減少空位 ===== */
+        /* ===== 詳細數據表：Desktop 撐滿容器 ===== */
         #dataTable {
-            width: max-content;
-            min-width: max-content;
-            display: inline-table;
+            width: 100%;
+            min-width: 600px;
+            display: table;
             table-layout: auto;
         }
         
         #dataTable th, #dataTable td {
-            padding-inline: 0px;
-            padding-block: 4px;
+            padding-block: 6px;
+            padding-inline: 6px;
         }
         
         #dataTable th:first-child,
@@ -319,16 +319,15 @@
             font-variant-numeric: tabular-nums;
         }
         
-        /* ===== 比較數據表：同樣減少空位 ===== */
+        /* ===== 比較數據表：Desktop 撐滿容器 ===== */
         #compareTable {
-            width: max-content;
-            min-width: max-content;
-            display: inline-table;
+            width: 100%;
+            display: table;
         }
         
         #compareTable th, #compareTable td {
-            padding-inline: 0px;
-            padding-block: 4px;
+            padding-block: 6px;
+            padding-inline: 6px;
         }
         
         #compareTable th:first-child,
@@ -473,6 +472,20 @@
                 padding-block: 5px;
                 padding-inline: 2px;
             }
+            
+            /* Mobile: 表格貼內容 + 可左右滑動 + padding 合理 (375px) */
+            #dataTable, #compareTable {
+                width: max-content;
+                min-width: max-content;
+                display: inline-table;
+                table-layout: auto;
+            }
+            
+            #dataTable th, #dataTable td,
+            #compareTable th, #compareTable td {
+                padding-block: 6px;
+                padding-inline: 4px;
+            }
         }
         
         @media (max-width: 480px) {
@@ -584,6 +597,13 @@
             #compareTable td {
                 padding-block: 5px;
                 padding-inline: 2px;
+            }
+            
+            /* Mobile (480px): 更緊湊的表格樣式 */
+            #dataTable th, #dataTable td,
+            #compareTable th, #compareTable td {
+                padding-block: 5px;
+                padding-inline: 3px;
             }
         }
         
@@ -1396,7 +1416,7 @@
         <!-- 表格区域 -->
         <div id="dataTableContainer">
             <h2>📋 詳細數據</h2>
-                <table id="dataTable">
+            <table id="dataTable">
                 <thead>
                     <tr>
                         <th>日期時間</th>
