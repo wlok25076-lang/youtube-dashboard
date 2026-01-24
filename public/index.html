@@ -418,90 +418,6 @@
             th, td {
                 padding: 8px;
             }
-            
-            /* ========== Mobile表格優化 - 卡片式布局 ========== */
-            #dataTableContainer {
-                padding: 10px;
-                overflow-x: visible;
-            }
-            
-            #dataTable {
-                min-width: unset;
-                border: none;
-            }
-            
-            #dataTable thead {
-                display: none;
-            }
-            
-            #dataTable tbody {
-                display: block;
-            }
-            
-            #dataTable tr {
-                display: block;
-                background: var(--card-bg);
-                border: 1px solid var(--border-color);
-                border-radius: 8px;
-                padding: 12px;
-                margin-bottom: 10px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            }
-            
-            #dataTable tr:hover {
-                box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-                transform: translateY(-1px);
-                transition: all 0.2s;
-            }
-            
-            #dataTable td {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding: 6px 0;
-                border: none;
-                text-align: left;
-                font-size: 13px;
-            }
-            
-            #dataTable td::before {
-                content: attr(data-label);
-                font-weight: 600;
-                color: var(--secondary-color);
-                margin-right: 10px;
-                min-width: 90px;
-                font-size: 12px;
-            }
-            
-            #dataTable td:first-child {
-                font-weight: 700;
-                color: var(--primary-color);
-                border-bottom: 1px solid var(--border-color);
-                padding-bottom: 8px;
-                margin-bottom: 8px;
-            }
-            
-            #dataTable td:first-child::before {
-                content: '📅 ';
-                min-width: auto;
-                margin-right: 5px;
-            }
-            
-            #dataTable td:nth-child(2),
-            #dataTable td:nth-child(4) {
-                font-weight: 600;
-                font-size: 14px;
-            }
-            
-            #dataTable td:nth-child(3),
-            #dataTable td:nth-child(5) {
-                justify-content: flex-end;
-            }
-            
-            #loadMoreButton {
-                font-size: 13px;
-                padding: 10px 16px;
-            }
         }
         
         @media (max-width: 480px) {
@@ -610,48 +526,6 @@
             
             th, td {
                 padding: 6px 4px;
-            }
-            
-            /* ========== 超小螢幕表格優化 ========== */
-            #dataTableContainer {
-                padding: 8px;
-            }
-            
-            #dataTableContainer h2 {
-                font-size: 1.1rem;
-                margin-bottom: 10px;
-            }
-            
-            #dataTable tr {
-                padding: 10px;
-                margin-bottom: 8px;
-                border-radius: 6px;
-            }
-            
-            #dataTable td {
-                padding: 5px 0;
-                font-size: 12px;
-            }
-            
-            #dataTable td::before {
-                font-size: 11px;
-                min-width: 80px;
-            }
-            
-            #dataTable td:first-child {
-                padding-bottom: 6px;
-                margin-bottom: 6px;
-                font-size: 13px;
-            }
-            
-            #dataTable td:nth-child(2),
-            #dataTable td:nth-child(4) {
-                font-size: 13px;
-            }
-            
-            #loadMoreButton {
-                font-size: 12px;
-                padding: 8px 12px;
             }
         }
         
@@ -3219,17 +3093,14 @@ async function updateVideoInBackend(videoData) {
                 
                 // 日期時間
                 const tdDateTime = document.createElement('td');
-                tdDateTime.setAttribute('data-label', '時間');
                 tdDateTime.textContent = row.dateTime;
                 
                 // 播放量
                 const tdViewCount = document.createElement('td');
-                tdViewCount.setAttribute('data-label', '播放量');
                 tdViewCount.textContent = formatNumberWithCommas(row.viewCount);
                 
                 // 播放量變化
                 const tdChange = document.createElement('td');
-                tdChange.setAttribute('data-label', '播放量變化');
                 const changeText = row.change > 0 ? 
                     '+' + formatNumberWithCommas(row.change) : 
                     formatNumberWithCommas(row.change);
@@ -3245,7 +3116,6 @@ async function updateVideoInBackend(videoData) {
                 
                 // Like數
                 const tdLikeCount = document.createElement('td');
-                tdLikeCount.setAttribute('data-label', 'Like數');
                 if (row.likeCount !== undefined && row.likeCount !== null) {
                     tdLikeCount.textContent = formatNumberWithCommas(row.likeCount);
                 } else {
@@ -3255,7 +3125,6 @@ async function updateVideoInBackend(videoData) {
                 
                 // Like數變化
                 const tdLikeChange = document.createElement('td');
-                tdLikeChange.setAttribute('data-label', 'Like數變化');
                 if (row.likeCountChange !== undefined && row.likeCountChange !== null) {
                     const likeChangeText = row.likeCountChange > 0 ? 
                         '+' + formatNumberWithCommas(row.likeCountChange) : 
