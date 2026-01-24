@@ -3,11 +3,5 @@
     "api/**/*.js": {
       "maxDuration": 30
     }
-  },
-  "crons": [
-    {
-      "path": "/api/fetch-and-store",
-      "schedule": "0 */1 * * *"
-    }
-  ]
+  }
 }
