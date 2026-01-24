@@ -22,9 +22,9 @@ export default async function handler(req, res) {
         // 返回符合前端預期的格式
         return res.status(200).json({
             success: true,
-            data: {
-                used: quotaStatus.usage,
-                total: quotaStatus.limit,
+            quota: {
+                usage: quotaStatus.usage,
+                limit: quotaStatus.limit,
                 resetDate: resetDate.toISOString(),
                 percentage: quotaStatus.percentage,
                 remaining: quotaStatus.remaining,

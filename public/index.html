@@ -1360,11 +1360,11 @@
                 
                 const result = await response.json();
                 
-                if (result.success && result.data) {
-                    const quota = result.data;
+                if (result.success && result.quota) {
+                    const quota = result.quota;
                     
                     // 計算配額百分比
-                    const quotaPercent = Math.round((quota.used / quota.total) * 100);
+                    const quotaPercent = Math.round((quota.usage / quota.limit) * 100);
                     
                     // 根據配額狀態設定顏色
                     let colorClass = 'var(--positive-color)';
@@ -1390,7 +1390,7 @@
                     container.innerHTML = `
                         <div class="quota-mini">
                             <span class="quota-label">📊 API配額：</span>
-                            <span class="quota-value" style="color: ${colorClass}">${formatNumberWithCommas(quota.used)} / ${formatNumberWithCommas(quota.total)}</span>
+                            <span class="quota-value" style="color: ${colorClass}">${formatNumberWithCommas(quota.usage)} / ${formatNumberWithCommas(quota.limit)}</span>
                             <span class="quota-value" style="color: ${colorClass}">(${quotaPercent}%)</span>
                             <span style="color: ${colorClass}; font-size: 12px;">${statusText}</span>
                             <div class="quota-reset">🔄 重置時間: ${resetText}</div>
