@@ -172,19 +172,6 @@
             text-decoration: underline;
         }
         
-        /* ========== 控制区域 ========== */
-        .controls {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
-            align-items: center;
-            justify-content: center;
-            margin: 25px 0;
-            padding: 15px;
-            background: rgba(0, 112, 243, 0.05);
-            border-radius: 8px;
-            border: 1px solid rgba(0, 112, 243, 0.1);
-        }
         
         button { 
             padding: 10px 20px; 
@@ -1238,6 +1225,9 @@
                     <button id="compareToggle" class="btn-action secondary-btn">
                         📊 比較
                     </button>
+                    <button id="exportData" class="btn-action secondary-btn">
+                        📥 導出
+                    </button>
                 </div>
             </div>
             
@@ -1307,13 +1297,6 @@
                     </tbody>
                 </table>
             </div>
-        </div>
-        
-        <!-- 控制区域 - 只保留導出按鈕 -->
-        <div class="controls">
-            <button id="exportData" class="primary-btn">
-                📥 導出數據
-            </button>
         </div>
         
         <!-- 状态信息 -->
