@@ -1390,6 +1390,11 @@
         
         <!-- 数据统计卡片 -->
         <div class="stats-grid" id="statsCards">
+            <!-- 【新增】最近 24 小時播放量 KPI -->
+            <div class="stat-card">
+                <h3>🕐 Views (Last 24h)</h3>
+                <p class="value" id="viewsLast24h">--</p>
+            </div>
             <div class="stat-card">
                 <h3>📅 發佈日期</h3>
                 <p class="value" id="publishDate">--</p>
@@ -2636,6 +2641,17 @@ async function updateVideoInBackend(videoData) {
         // ==================== 【新增函数】從API統計信息更新卡片 ====================
         function updateStatsFromAPI(statistics) {
             if (!statistics) return;
+            
+            // 【新增】最近 24 小時播放量
+            if (statistics.analytics && statistics.analytics.views_last_24h !== undefined) {
+                const views24h = statistics.analytics.views_last_24h;
+                const views24hElement = document.getElementById('viewsLast24h');
+                if (views24h !== null && views24h !== undefined) {
+                    views24hElement.textContent = formatNumberWithCommas(views24h);
+                } else {
+                    views24hElement.textContent = '--';
+                }
+            }
             
             // 【修改】發佈日期 - 優先使用全局變量中的API返回日期
             let publishDateFound = false;

@@ -12,9 +12,109 @@ import {
     DEFAULT_ALL_VIDEO_IDS 
 } from './videos-config.js';
 
+// 【新增】YouTube Analytics API 配置
+const YOUTUBE_ANALYTICS_API_BASE = 'https://youtubeanalytics.googleapis.com/v2/reports';
+const YOUTUBE_ANALYTICS_API_KEY = process.env.YOUTUBE_ANALYTICS_API_KEY;
+const YOUTUBE_CHANNEL_ID = process.env.YOUTUBE_CHANNEL_ID;
+
 // 預設值
 let TRACKED_VIDEOS = DEFAULT_TRACKED_VIDEOS;
 let ALL_VIDEO_IDS = DEFAULT_ALL_VIDEO_IDS;
+
+// 【新增】從 YouTube Analytics API 獲取最近 24 小時播放量
+async function getLast24hViews(analyticsClient, channelId, tz = "America/Chicago") {
+    if (!YOUTUBE_ANALYTICS_API_KEY || !channelId) {
+        console.warn('⚠️ 缺少 YouTube Analytics API Key 或 Channel ID，無法獲取 24h 數據');
+        return { views24h: null, granularity: 'unavailable', reason: 'missing_config' };
+    }
+
+    try {
+        const now = new Date();
+        
+        // 根據時區計算開始和結束時間
+        let timeZoneOffset;
+        if (tz === "America/Chicago") {
+            timeZoneOffset = -6 * 60; // CST = UTC-6 (標準時間) 或 UTC-5 (夏令時間)
+        } else if (tz === "Asia/Hong_Kong") {
+            timeZoneOffset = 8 * 60; // HKT = UTC+8
+        } else {
+            timeZoneOffset = 0;
+        }
+
+        // 計算當地時間的現在時刻
+        const nowLocal = new Date(now.getTime() + (timeZoneOffset * 60 * 1000) - (now.getTimezoneOffset() * 60 * 1000));
+        const endDate = nowLocal.toISOString().split('T')[0]; // YYYY-MM-DD
+        const endTime = nowLocal.toTimeString().split(' ')[0].substring(0, 5); // HH:MM
+        
+        // 計算 24 小時前的當地時間
+        const startDateTime = new Date(nowLocal.getTime() - 24 * 60 * 60 * 1000);
+        const startDate = startDateTime.toISOString().split('T')[0];
+        const startTime = startDateTime.toTimeString().split(' ')[0].substring(0, 5);
+
+        console.log(`📊 [24h Views] 時區: ${tz}`);
+        console.log(`   開始: ${startDate} ${startTime}`);
+        console.log(`   結束: ${endDate} ${endTime}`);
+
+        // 嘗試使用 hour 維度（更精確）
+        try {
+            const hourUrl = `${YOUTUBE_ANALYTICS_API_BASE}?ids=channel==${channelId}&startDate=${startDate}&endDate=${endDate}&metrics=views&dimensions=hour&timeZone=${tz}&key=${YOUTUBE_ANALYTICS_API_KEY}`;
+            
+            const hourResponse = await fetch(hourUrl);
+            
+            if (hourResponse.ok) {
+                const hourData = await hourResponse.json();
+                
+                if (hourData.rows && hourData.rows.length > 0) {
+                    // 加總所有小時的 views
+                    const totalViews = hourData.rows.reduce((sum, row) => sum + (row[1] || 0), 0);
+                    console.log(`✅ [24h Views] 使用 hour 粒度: ${totalViews} views (${hourData.rows.length} 小時)`);
+                    return { 
+                        views24h: totalViews, 
+                        granularity: 'hour',
+                        startDate,
+                        endDate,
+                        hoursCount: hourData.rows.length
+                    };
+                }
+            } else if (hourResponse.status === 400) {
+                // hour 維度可能不支援，嘗試 day 維度
+                console.log('ℹ️ hour 維度不支援，嘗試 day 維度...');
+            }
+        } catch (hourError) {
+            console.warn('⚠️ hour 維度查詢失敗:', hourError.message);
+        }
+
+        // 使用 day 維度（回退方案）
+        const dayUrl = `${YOUTUBE_ANALYTICS_API_BASE}?ids=channel==${channelId}&startDate=${startDate}&endDate=${endDate}&metrics=views&dimensions=day&timeZone=${tz}&key=${YOUTUBE_ANALYTICS_API_KEY}`;
+        
+        const dayResponse = await fetch(dayUrl);
+        
+        if (dayResponse.ok) {
+            const dayData = await dayResponse.json();
+            
+            if (dayData.rows && dayData.rows.length > 0) {
+                // 加總所有天的 views
+                const totalViews = dayData.rows.reduce((sum, row) => sum + (row[1] || 0), 0);
+                console.log(`⚠️ [24h Views] 使用 day 粒度 (近似值): ${totalViews} views (${dayData.rows.length} 天)`);
+                return { 
+                    views24h: totalViews, 
+                    granularity: 'day_approximate',
+                    startDate,
+                    endDate,
+                    daysCount: dayData.rows.length,
+                    note: '使用 day 粒度，是 24 小時的近似值'
+                };
+            }
+        }
+        
+        console.warn('⚠️ [24h Views] 無數據返回');
+        return { views24h: null, granularity: 'no_data', reason: 'empty_response' };
+        
+    } catch (error) {
+        console.error('❌ [24h Views] API 錯誤:', error.message);
+        return { views24h: null, granularity: 'error', error: error.message };
+    }
+}
 
 // 【新增】從YouTube API獲取影片資訊（包括上載日期）
 async function getVideoInfoFromYouTube(videoId) {
@@ -240,6 +340,9 @@ if (!ALL_VIDEO_IDS.includes(videoId)) {
     // 4. 計算統計信息
     let statistics = null;
     if (stats === 'true' && processedData.length > 0) {
+      // 【新增】獲取最近 24 小時播放量
+      const analyticsResult = await getLast24hViews(null, YOUTUBE_CHANNEL_ID, "Asia/Hong_Kong");
+      
       const latest = processedData[processedData.length - 1];
       const earliest = processedData[0];
       
@@ -282,6 +385,16 @@ if (!ALL_VIDEO_IDS.includes(videoId)) {
             end: new Date(processedData[processedData.length - 1].timestamp).toISOString()
           },
           hasLikeCount: hasLikeCount
+        },
+        // 【新增】最近 24 小時播放量
+        analytics: {
+          views_last_24h: analyticsResult?.views24h ?? null,
+          views_24h_granularity: analyticsResult?.granularity || 'unavailable',
+          views_24h_window: {
+            start: analyticsResult?.startDate,
+            end: analyticsResult?.endDate,
+            timezone: "Asia/Hong_Kong"
+          }
         },
         current: {
           viewCount: latest.viewCount,
