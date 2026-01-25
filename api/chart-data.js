@@ -21,98 +21,166 @@ const YOUTUBE_CHANNEL_ID = process.env.YOUTUBE_CHANNEL_ID;
 let TRACKED_VIDEOS = DEFAULT_TRACKED_VIDEOS;
 let ALL_VIDEO_IDS = DEFAULT_ALL_VIDEO_IDS;
 
-// 【新增】從 YouTube Analytics API 獲取最近 24 小時播放量
-async function getLast24hViews(analyticsClient, channelId, tz = "America/Chicago") {
+// 【新增】從 YouTube Analytics API 獲取最近 24 小時播放量（使用整點計算）
+async function getLast24ViewsHourly(channelId, localTimezone = "Asia/Hong_Kong") {
     if (!YOUTUBE_ANALYTICS_API_KEY || !channelId) {
         console.warn('⚠️ 缺少 YouTube Analytics API Key 或 Channel ID，無法獲取 24h 數據');
-        return { views24h: null, granularity: 'unavailable', reason: 'missing_config' };
+        return { views_last_24h: 0, last_24h_window: null, error: 'missing_config' };
     }
 
     try {
         const now = new Date();
         
-        // 根據時區計算開始和結束時間
-        let timeZoneOffset;
-        if (tz === "America/Chicago") {
-            timeZoneOffset = -6 * 60; // CST = UTC-6 (標準時間) 或 UTC-5 (夏令時間)
-        } else if (tz === "Asia/Hong_Kong") {
-            timeZoneOffset = 8 * 60; // HKT = UTC+8
+        // ========== 本地時區計算 ==========
+        // 根據時區計算時區偏移（分鐘）
+        let localOffsetMinutes;
+        if (localTimezone === "Asia/Hong_Kong") {
+            localOffsetMinutes = 8 * 60; // UTC+8
+        } else if (localTimezone === "America/Chicago") {
+            localOffsetMinutes = -6 * 60; // UTC-6 (標準時間)
+        } else if (localTimezone === "America/Los_Angeles") {
+            localOffsetMinutes = -8 * 60; // UTC-8 (標準時間) 或 UTC-7 (夏令時間)
         } else {
-            timeZoneOffset = 0;
+            localOffsetMinutes = now.getTimezoneOffset();
         }
 
-        // 計算當地時間的現在時刻
-        const nowLocal = new Date(now.getTime() + (timeZoneOffset * 60 * 1000) - (now.getTimezoneOffset() * 60 * 1000));
-        const endDate = nowLocal.toISOString().split('T')[0]; // YYYY-MM-DD
-        const endTime = nowLocal.toTimeString().split(' ')[0].substring(0, 5); // HH:MM
+        // 計算本地時間的現在時刻
+        const nowLocal = new Date(now.getTime() + (localOffsetMinutes * 60 * 1000));
         
-        // 計算 24 小時前的當地時間
-        const startDateTime = new Date(nowLocal.getTime() - 24 * 60 * 60 * 1000);
-        const startDate = startDateTime.toISOString().split('T')[0];
-        const startTime = startDateTime.toTimeString().split(' ')[0].substring(0, 5);
-
-        console.log(`📊 [24h Views] 時區: ${tz}`);
-        console.log(`   開始: ${startDate} ${startTime}`);
-        console.log(`   結束: ${endDate} ${endTime}`);
-
-        // 嘗試使用 hour 維度（更精確）
-        try {
-            const hourUrl = `${YOUTUBE_ANALYTICS_API_BASE}?ids=channel==${channelId}&startDate=${startDate}&endDate=${endDate}&metrics=views&dimensions=hour&timeZone=${tz}&key=${YOUTUBE_ANALYTICS_API_KEY}`;
-            
-            const hourResponse = await fetch(hourUrl);
-            
-            if (hourResponse.ok) {
-                const hourData = await hourResponse.json();
-                
-                if (hourData.rows && hourData.rows.length > 0) {
-                    // 加總所有小時的 views
-                    const totalViews = hourData.rows.reduce((sum, row) => sum + (row[1] || 0), 0);
-                    console.log(`✅ [24h Views] 使用 hour 粒度: ${totalViews} views (${hourData.rows.length} 小時)`);
-                    return { 
-                        views24h: totalViews, 
-                        granularity: 'hour',
-                        startDate,
-                        endDate,
-                        hoursCount: hourData.rows.length
-                    };
-                }
-            } else if (hourResponse.status === 400) {
-                // hour 維度可能不支援，嘗試 day 維度
-                console.log('ℹ️ hour 維度不支援，嘗試 day 維度...');
-            }
-        } catch (hourError) {
-            console.warn('⚠️ hour 維度查詢失敗:', hourError.message);
-        }
-
-        // 使用 day 維度（回退方案）
-        const dayUrl = `${YOUTUBE_ANALYTICS_API_BASE}?ids=channel==${channelId}&startDate=${startDate}&endDate=${endDate}&metrics=views&dimensions=day&timeZone=${tz}&key=${YOUTUBE_ANALYTICS_API_KEY}`;
+        // 計算本地時間的上一個整點（end_local）
+        const endLocal = new Date(nowLocal);
+        endLocal.setMinutes(0, 0, 0);
         
-        const dayResponse = await fetch(dayUrl);
+        // 計算 start_local = end_local - 24 hours
+        const startLocal = new Date(endLocal.getTime() - 24 * 60 * 60 * 1000);
+
+        // ========== 太平洋時區轉換 ==========
+        // YouTube Analytics 使用 Pacific 時間（America/Los_Angeles）邊界
+        // 需要將本地時間轉換到太平洋時間
+        // Pacific Time: UTC-8 (標準) 或 UTC-7 (夏令)
         
-        if (dayResponse.ok) {
-            const dayData = await dayResponse.json();
-            
-            if (dayData.rows && dayData.rows.length > 0) {
-                // 加總所有天的 views
-                const totalViews = dayData.rows.reduce((sum, row) => sum + (row[1] || 0), 0);
-                console.log(`⚠️ [24h Views] 使用 day 粒度 (近似值): ${totalViews} views (${dayData.rows.length} 天)`);
-                return { 
-                    views24h: totalViews, 
-                    granularity: 'day_approximate',
-                    startDate,
-                    endDate,
-                    daysCount: dayData.rows.length,
-                    note: '使用 day 粒度，是 24 小時的近似值'
-                };
+        // 計算太平洋時區偏移
+        const pacificOffset = -8 * 60; // 標準時間 UTC-8
+        const nowPacific = new Date(now.getTime() + (pacificOffset * 60 * 1000));
+        
+        // 檢查是否為夏令時間（太平洋時間）
+        // 夏令時：3月第二個週日 2:00 到 11月第一個週日 2:00
+        const month = nowPacific.getMonth(); // 0-11
+        const dayOfMonth = nowPacific.getDate();
+        const dayOfWeek = nowPacific.getDay(); // 0-6 (週日)
+        
+        let isDST = false;
+        if (month >= 3 && month <= 10) {
+            // 3月到10月可能是夏令時
+            if (month > 3 && month < 10) {
+                isDST = true;
+            } else if (month === 3) {
+                // 3月：第二個週日開始夏令時
+                const secondSunday = 8 + (7 - dayOfWeek) % 7;
+                if (dayOfMonth >= secondSunday) isDST = true;
+            } else if (month === 10) {
+                // 11月：第一個週日結束夏令時
+                const firstSunday = 1 + (7 - dayOfWeek) % 7;
+                if (dayOfMonth < firstSunday) isDST = true;
             }
         }
         
-        console.warn('⚠️ [24h Views] 無數據返回');
-        return { views24h: null, granularity: 'no_data', reason: 'empty_response' };
+        const finalPacificOffset = isDST ? -7 * 60 : -8 * 60;
+        
+        // 將本地時間的整點轉換到太平洋時間
+        const endPacificTime = new Date(endLocal.getTime() + (finalPacificOffset * 60 * 1000));
+        const startPacificTime = new Date(startLocal.getTime() + (finalPacificOffset * 60 * 1000));
+
+        // 格式化日期給 API
+        const startDate = startPacificTime.toISOString().split('T')[0]; // YYYY-MM-DD
+        const endDate = endPacificTime.toISOString().split('T')[0];     // YYYY-MM-DD
+
+        console.log(`📊 [24h Views] 計算窗口`);
+        console.log(`   本地時區: ${localTimezone}`);
+        console.log(`   太平洋時區: ${isDST ? 'PDT (UTC-7)' : 'PST (UTC-8)'}`);
+        console.log(`   start_local: ${startLocal.toISOString()}`);
+        console.log(`   end_local: ${endLocal.toISOString()}`);
+        console.log(`   start_pacific: ${startPacificTime.toISOString()}`);
+        console.log(`   end_pacific: ${endPacificTime.toISOString()}`);
+
+        // ========== 使用 day,hour 維度獲取小時數據 ==========
+        const url = `${YOUTUBE_ANALYTICS_API_BASE}?ids=channel==${channelId}&startDate=${startDate}&endDate=${endDate}&metrics=views&dimensions=day,hour&timeZone=America/Los_Angeles&key=${YOUTUBE_ANALYTICS_API_KEY}`;
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            console.error(`❌ [24h Views] API 錯誤: ${response.status}`);
+            return { views_last_24h: 0, last_24h_window: null, error: `API ${response.status}` };
+        }
+        
+        const data = await response.json();
+        
+        if (!data.rows || data.rows.length === 0) {
+            console.warn('⚠️ [24h Views] 無數據返回');
+            return { views_last_24h: 0, last_24h_window: null, error: 'no_data' };
+        }
+        
+        // 解析 columnHeaders 確認欄位順序
+        const headers = data.columnHeaders || [];
+        let dayIndex = -1;
+        let hourIndex = -1;
+        let viewsIndex = -1;
+        
+        headers.forEach((header, index) => {
+            if (header.name === 'day') dayIndex = index;
+            else if (header.name === 'hour') hourIndex = index;
+            else if (header.name === 'views') viewsIndex = index;
+        });
+        
+        // 預設位置（如果 headers 解析失敗）
+        if (dayIndex === -1) dayIndex = 0;
+        if (hourIndex === -1) hourIndex = 1;
+        if (viewsIndex === -1) viewsIndex = 2;
+        
+        console.log(`📊 [24h Views] 欄位順序: day=${dayIndex}, hour=${hourIndex}, views=${viewsIndex}`);
+
+        // ========== 篩選並加總 ==========
+        // 轉換 Pacific 時間範圍為 Date 對象進行比較
+        const startPacificMs = startPacificTime.getTime();
+        const endPacificMs = endPacificTime.getTime();
+        
+        let totalViews = 0;
+        let validRows = 0;
+        
+        data.rows.forEach(row => {
+            // 解析 day 和 hour
+            const dayStr = row[dayIndex]; // YYYY-MM-DD
+            const hour = parseInt(row[hourIndex]); // 0-23
+            const views = parseInt(row[viewsIndex]) || 0;
+            
+            // 組成 Pacific datetime
+            const [year, month, day] = dayStr.split('-').map(Number);
+            const dtPacific = new Date(year, month - 1, day, hour, 0, 0, 0);
+            const dtMs = dtPacific.getTime();
+            
+            // 篩選：start_pacific <= dt < end_pacific
+            if (dtMs >= startPacificMs && dtMs < endPacificMs) {
+                totalViews += views;
+                validRows++;
+                console.log(`   [24h] ${dayStr} ${hour.toString().padStart(2, '0')}:00 → +${views}`);
+            }
+        });
+
+        console.log(`✅ [24h Views] 總計: ${totalViews} views (${validRows} 小時有效數據)`);
+
+        // 返回結果
+        return {
+            views_last_24h: totalViews,
+            last_24h_window: {
+                start: startLocal.toISOString(),
+                end: endLocal.toISOString(),
+                timezone: localTimezone
+            }
+        };
         
     } catch (error) {
         console.error('❌ [24h Views] API 錯誤:', error.message);
-        return { views24h: null, granularity: 'error', error: error.message };
+        return { views_last_24h: 0, last_24h_window: null, error: error.message };
     }
 }
 
@@ -340,8 +408,8 @@ if (!ALL_VIDEO_IDS.includes(videoId)) {
     // 4. 計算統計信息
     let statistics = null;
     if (stats === 'true' && processedData.length > 0) {
-      // 【新增】獲取最近 24 小時播放量
-      const analyticsResult = await getLast24hViews(null, YOUTUBE_CHANNEL_ID, "Asia/Hong_Kong");
+      // 【修改】獲取最近 24 小時播放量（使用整點計算）
+      const last24Result = await getLast24ViewsHourly(YOUTUBE_CHANNEL_ID, "Asia/Hong_Kong");
       
       const latest = processedData[processedData.length - 1];
       const earliest = processedData[0];
@@ -386,15 +454,11 @@ if (!ALL_VIDEO_IDS.includes(videoId)) {
           },
           hasLikeCount: hasLikeCount
         },
-        // 【新增】最近 24 小時播放量
+        // 【修改】最近 24 小時播放量（使用整點計算結果）
         analytics: {
-          views_last_24h: analyticsResult?.views24h ?? null,
-          views_24h_granularity: analyticsResult?.granularity || 'unavailable',
-          views_24h_window: {
-            start: analyticsResult?.startDate,
-            end: analyticsResult?.endDate,
-            timezone: "Asia/Hong_Kong"
-          }
+          views_last_24h: last24Result?.views_last_24h ?? 0,
+          last_24h_window: last24Result?.last_24h_window || null,
+          error: last24Result?.error || null
         },
         current: {
           viewCount: latest.viewCount,

@@ -1390,11 +1390,6 @@
         
         <!-- 数据统计卡片 -->
         <div class="stats-grid" id="statsCards">
-            <!-- 【新增】最近 24 小時播放量 KPI -->
-            <div class="stat-card">
-                <h3>🕐 Views (Last 24h)</h3>
-                <p class="value" id="viewsLast24h">--</p>
-            </div>
             <div class="stat-card">
                 <h3>📅 發佈日期</h3>
                 <p class="value" id="publishDate">--</p>
@@ -1414,6 +1409,11 @@
             <div class="stat-card">
                 <h3>⏱️ 平均每小時</h3>
                 <p class="value" id="avgHourly">--</p>
+            </div>
+            <!-- 【修改】最近 24 小時播放量 KPI（移動到「平均每小時」右邊） -->
+            <div class="stat-card">
+                <h3>🕐 最近24小時</h3>
+                <p class="value" id="viewsLast24h">--</p>
             </div>
         </div>
         
