@@ -123,35 +123,60 @@ function computeViewsLast24h(data, now = Date.now()) {
         current = snapshots[snapshots.length - 1];
     }
     
-    // 找到 ts >= BOUNDARY_24H_AGO 中最接近 BOUNDARY_24H_AGO 的一筆作為 base
+    // 【修改】在所有數據點中尋找最接近 BOUNDARY_24H_AGO 的點（無論方向）
+    // 這樣確保使用最接近 24 小時前的數據，而不是只取 >= 24 小時前的點
     let base = null;
     let baseDiff = Infinity;
     
     for (const snapshot of snapshots) {
-        if (snapshot.ts >= BOUNDARY_24H_AGO) {
-            const diff = Math.abs(snapshot.ts - BOUNDARY_24H_AGO);
-            if (diff < baseDiff) {
-                baseDiff = diff;
-                base = snapshot;
-            }
+        const diff = Math.abs(snapshot.ts - BOUNDARY_24H_AGO);
+        if (diff < baseDiff) {
+            baseDiff = diff;
+            base = snapshot;
         }
     }
     
-    // 如果沒有找到 >= 24小時前 的數據，使用最早的一筆（但距離太遠就不準確）
-    if (!base) {
-        // 檢查最早數據是否在合理範圍內（48小時內）
-        const earliest = snapshots[0];
-        if (NOW - earliest.ts <= 48 * 60 * 60 * 1000) {
-            base = earliest;
-        } else {
-            console.warn('⚠️ [24h] 沒有足夠早的數據，無法計算 24h');
-            return { 
-                views: null, 
-                reason: 'no_data_24h_ago',
-                oldest_ts: earliest.ts,
-                now: NOW
-            };
+    // 檢查找到的 base 是否在合理範圍內（48 小時內）
+    if (base) {
+        const windowHours = (current.ts - base.ts) / MS_24H;
+        if (windowHours < 23.5) {
+            // 窗口小於 23.5 小時，嘗試找更早的數據點
+            console.warn(`⚠️ [24h] 窗口只有 ${windowHours.toFixed(2)} 小時，嘗試找更早的數據點`);
+            
+            // 尋找所有 < BOUNDARY_24H_AGO 的點中，最接近 BOUNDARY_24H_AGO 的一個
+            let earlierBase = null;
+            let earlierDiff = Infinity;
+            
+            for (const snapshot of snapshots) {
+                if (snapshot.ts < BOUNDARY_24H_AGO) {
+                    const diff = BOUNDARY_24H_AGO - snapshot.ts; // 正數差值
+                    if (diff < earlierDiff) {
+                        earlierDiff = diff;
+                        earlierBase = snapshot;
+                    }
+                }
+            }
+            
+            // 如果有更早且窗口大於 23.5 小時的點，使用它
+            if (earlierBase) {
+                const earlierWindowHours = (current.ts - earlierBase.ts) / MS_24H;
+                if (earlierWindowHours >= 23.5) {
+                    base = earlierBase;
+                    baseDiff = earlierDiff;
+                    console.log(`✅ [24h] 使用更早的數據點，窗口: ${earlierWindowHours.toFixed(2)} 小時`);
+                }
+            }
         }
+        
+        // 最終檢查：如果窗口仍然太小（< 22 小時），標記為數據不足
+        const finalWindowHours = (current.ts - base.ts) / MS_24H;
+        if (finalWindowHours < 22) {
+            console.warn(`⚠️ [24h] 窗口只有 ${finalWindowHours.toFixed(2)} 小時，數據可能不足以計算準確的 24h`);
+        }
+    } else {
+        // 沒有找到任何數據點
+        console.warn('⚠️ [24h] 沒有數據點，無法計算 24h');
+        return { views: null, reason: 'no_data_24h_ago' };
     }
     
     // 計算差值，確保不為負數
