@@ -2638,18 +2638,37 @@ async function updateVideoInBackend(videoData) {
             }
         }
         
-        // ==================== 【新增函数】從API統計信息更新卡片 ====================
+        // ==================== 【修改函数】從API統計信息更新卡片（支援 fallback）====================
         function updateStatsFromAPI(statistics) {
             if (!statistics) return;
             
-            // 【新增】最近 24 小時播放量
-            if (statistics.analytics && statistics.analytics.views_last_24h !== undefined) {
+            // 【修改】最近 24 小時播放量（支援 fallback）
+            const views24hElement = document.getElementById('viewsLast24h');
+            
+            if (statistics.analytics && statistics.analytics.views_last_24h !== null) {
+                // 有 24h 數據，正常顯示
                 const views24h = statistics.analytics.views_last_24h;
-                const views24hElement = document.getElementById('viewsLast24h');
-                if (views24h !== null && views24h !== undefined) {
-                    views24hElement.textContent = formatNumberWithCommas(views24h);
+                views24hElement.textContent = formatNumberWithCommas(views24h);
+                
+                // 可選：顯示數據來源
+                const source = statistics.analytics.views_last_24h_source || 'gist';
+                console.log(`📊 [24h] 顯示計算結果: ${views24h} views (來源: ${source})`);
+            } else {
+                // 沒有 24h 數據，使用 fallback
+                const fallback = statistics.analytics?.fallback;
+                
+                if (fallback && fallback.available && fallback.today_growth !== null) {
+                    // 使用今日增長作為 fallback
+                    const todayGrowth = fallback.today_growth;
+                    views24hElement.textContent = formatNumberWithCommas(todayGrowth);
+                    console.log(`📊 [24h] 使用 fallback: 今日增長 ${todayGrowth} views`);
+                    
+                    // 可以考慮在 UI 上添加 "Estimated" 標記
+                    // 但目前設計只顯示數字，用戶可以看到與今日增長卡片相同
                 } else {
+                    // 完全沒有數據
                     views24hElement.textContent = '--';
+                    console.warn(`📊 [24h] 無數據可用`);
                 }
             }
             

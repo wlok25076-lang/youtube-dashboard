@@ -153,20 +153,39 @@ youtube-dashboard/
 └── README.md
 ```
 
-## 📊 新功能：最近 24 小時播放量
+## 📊 最近 24 小時播放量
 
 ### 功能說明
-透過 YouTube Analytics API 獲取最近 24 小時的精確播放量數據，在儀表板首頁以「🕐 Views (Last 24h)」KPI 卡片顯示。
+在儀表板首頁顯示「🕐 最近 24 小時」KPI 卡片，展示影片在最近 24 小時內的播放量增長。
+
+### 數據來源（優先級）
+
+1. **本地計算（首選）** - 從 Gist 存儲的小時級快照數據中計算
+   - 支援新舊數據格式：`[{ts, views_total}]` 或 `[{timestamp, viewCount}]`
+   - 自動處理數據不足的情況
+
+2. **YouTube Analytics API（備用）** - 當本地數據不足時使用
+   - 會消耗 API 配額
+   - 需要 `YOUTUBE_ANALYTICS_API_KEY` 和 `YOUTUBE_CHANNEL_ID`
+
+3. **今日增長（fallback）** - 當前兩者都無法使用時
+   - 顯示當日香港時間的播放量增長
+   - 適用於數據剛開始收集的情況
+
+### 數據來源標記
+- **gist** - 使用本地 Gist 快照計算
+- **analytics_api** - 使用 YouTube Analytics API
+- **unavailable** - 無法獲取數據（顯示 "--"）
 
 ### 使用方式
-1. 確保已設定 `YOUTUBE_ANALYTICS_API_KEY` 和 `YOUTUBE_CHANNEL_ID` 環境變數
-2. 訪問儀表板首頁
-3. 在統計卡片區塊即可看到「最近 24 小時播放量」
+1. 訪問儀表板首頁
+2. 在統計卡片區塊即可看到「最近 24 小時播放量」
+3. 瀏覽器控制台可查看數據來源和計算過程
 
-### 數據說明
-- **hour 粒度** - 精確的小時級數據（首選）
-- **day 粒度** - 日級近似值（hour 不支援時的回退方案）
-- **unavailable** - 缺少 API 配置或認證
+### 測試
+```bash
+npm test  # 運行 test-24h-views.js 測試最近 24 小時計算功能
+```
 
 ## 🔒 安全注意事項
 
