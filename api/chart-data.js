@@ -17,17 +17,46 @@ const YOUTUBE_ANALYTICS_API_BASE = 'https://youtubeanalytics.googleapis.com/v2/r
 const YOUTUBE_ANALYTICS_API_KEY = process.env.YOUTUBE_ANALYTICS_API_KEY;
 const YOUTUBE_CHANNEL_ID = process.env.YOUTUBE_CHANNEL_ID;
 
+// 【新增】全域常量
+const MS_24H = 24 * 60 * 60 * 1000; // 24小時的毫秒數
+
+// 【新增】時間戳正規化 helper
+// 支援 number timestamp 與 ISO string
+// 無法解析時返回 null 並打印 warn
+function normalizeTs(ts) {
+    if (ts === null || ts === undefined) {
+        return null;
+    }
+    
+    // 如果已經是 number，直接返回
+    if (typeof ts === 'number') {
+        return ts;
+    }
+    
+    // 如果是 ISO string，嘗試解析
+    if (typeof ts === 'string') {
+        const parsed = Date.parse(ts);
+        if (!isNaN(parsed)) {
+            return parsed;
+        }
+    }
+    
+    // 無法解析
+    console.warn('⚠️ [normalizeTs] 無法解析時間戳:', ts);
+    return null;
+}
+
 // 預設值
 let TRACKED_VIDEOS = DEFAULT_TRACKED_VIDEOS;
 let ALL_VIDEO_IDS = DEFAULT_ALL_VIDEO_IDS;
 
-// 【新增】計算最近 24 小時播放量（使用 gist 數據）
+// 【修改】計算最近 24 小時播放量（使用 gist 數據）
 // 支援新舊資料格式：
 // - 新版：data.snapshots = [{ ts, views_total }, ...]（小時/分鐘級別快照）
 // - 舊版：data = [{ timestamp, viewCount }, ...]（累積數據陣列）
+// - ts 支援 number 與 ISO string
 function computeViewsLast24h(data, now = Date.now()) {
     const NOW = now;
-    const MS_24H = 24 * 60 * 60 * 1000;
     const BOUNDARY_24H_AGO = NOW - MS_24H;
     
     // 嘗試解析數據為 snapshots 格式
@@ -35,20 +64,40 @@ function computeViewsLast24h(data, now = Date.now()) {
     
     if (Array.isArray(data)) {
         // 舊版格式：[{ timestamp, viewCount, ... }, ...]
-        snapshots = data.map(item => ({
-            ts: item.timestamp || item.ts,
-            views_total: item.viewCount || item.views_total || 0
-        }));
+        // 新版格式：[{ ts, views_total, ... }, ...]
+        snapshots = data.map(item => {
+            const ts = normalizeTs(item.timestamp || item.ts);
+            if (ts === null) {
+                console.warn('⚠️ [24h] 跳過無效的時間戳記錄:', item);
+                return null;
+            }
+            return {
+                ts: ts,
+                views_total: item.viewCount || item.views_total || 0
+            };
+        }).filter(item => item !== null);
     } else if (data && Array.isArray(data.snapshots)) {
         // 新版格式：{ snapshots: [{ ts, views_total }, ...] }
-        snapshots = data.snapshots.map(item => ({
-            ts: item.ts || item.timestamp,
-            views_total: item.views_total || item.viewCount || 0
-        }));
+        snapshots = data.snapshots.map(item => {
+            const ts = normalizeTs(item.ts || item.timestamp);
+            if (ts === null) {
+                console.warn('⚠️ [24h] 跳過無效的時間戳記錄:', item);
+                return null;
+            }
+            return {
+                ts: ts,
+                views_total: item.views_total || item.viewCount || 0
+            };
+        }).filter(item => item !== null);
     } else {
         // 數據格式無法識別
         console.warn('⚠️ [24h] 無法識別的數據格式');
         return { views: null, reason: 'invalid_format' };
+    }
+    
+    if (snapshots.length === 0) {
+        console.warn('⚠️ [24h] 沒有有效的數據記錄');
+        return { views: null, reason: 'no_valid_data' };
     }
     
     // 按時間戳排序（由舊到新）
@@ -125,7 +174,7 @@ function computeViewsLast24h(data, now = Date.now()) {
     };
 }
 
-// 【新增】從 gist 數據計算今日增長（本地時區，香港 UTC+8）
+// 【修改】從 gist 數據計算今日增長（本地時區，香港 UTC+8）
 function computeTodayGrowth(data, now = Date.now()) {
     const NOW = now;
     
@@ -133,21 +182,40 @@ function computeTodayGrowth(data, now = Date.now()) {
     const hkNow = new Date(NOW + (8 * 3600000));
     const hkTodayStart = new Date(hkNow.getFullYear(), hkNow.getMonth(), hkNow.getDate());
     const hkTodayStartUTC = hkTodayStart.getTime() - (8 * 3600000);
-    const hkTodayEndUTC = hkTodayStartUTC + MS_24H;
+    const hkTodayEndUTC = hkTodayStartUTC + MS_24H; // 使用全域常量 MS_24H
     
     // 嘗試解析數據
     let snapshots = [];
     
     if (Array.isArray(data)) {
-        snapshots = data.map(item => ({
-            ts: item.timestamp || item.ts,
-            views_total: item.viewCount || item.views_total || 0
-        }));
+        snapshots = data.map(item => {
+            const ts = normalizeTs(item.timestamp || item.ts);
+            if (ts === null) {
+                console.warn('⚠️ [todayGrowth] 跳過無效的時間戳記錄:', item);
+                return null;
+            }
+            return {
+                ts: ts,
+                views_total: item.viewCount || item.views_total || 0
+            };
+        }).filter(item => item !== null);
     } else if (data && Array.isArray(data.snapshots)) {
-        snapshots = data.snapshots.map(item => ({
-            ts: item.ts || item.timestamp,
-            views_total: item.views_total || item.viewCount || 0
-        }));
+        snapshots = data.snapshots.map(item => {
+            const ts = normalizeTs(item.ts || item.timestamp);
+            if (ts === null) {
+                console.warn('⚠️ [todayGrowth] 跳過無效的時間戳記錄:', item);
+                return null;
+            }
+            return {
+                ts: ts,
+                views_total: item.views_total || item.viewCount || 0
+            };
+        }).filter(item => item !== null);
+    }
+    
+    if (snapshots.length === 0) {
+        console.warn('⚠️ [todayGrowth] 沒有有效的數據記錄');
+        return { growth: null, reason: 'no_valid_data' };
     }
     
     // 按時間戳排序
@@ -332,9 +400,17 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  if (!GIST_ID || !GITHUB_TOKEN) {
+  // 【修改】改進環境變數缺失時的錯誤訊息
+  const missingEnvVars = [];
+  if (!GIST_ID) missingEnvVars.push('GIST_ID');
+  if (!GITHUB_TOKEN) missingEnvVars.push('GITHUB_TOKEN');
+  
+  if (missingEnvVars.length > 0) {
+    const errorMsg = `Server configuration error: missing ${missingEnvVars.join(', ')}. Please set these environment variables in Vercel.`;
+    console.error(`❌ ${errorMsg}`);
     return res.status(500).json({ 
-      error: 'Server configuration error' 
+      error: errorMsg,
+      missingVars: missingEnvVars
     });
   }
 
@@ -368,37 +444,37 @@ export default async function handler(req, res) {
 
     console.log(`📡 API請求: videoId=${videoId}, range=${range}, interval=${interval}`);
 
-// 【修改】驗證影片ID是否在追蹤清單中
-if (!ALL_VIDEO_IDS.includes(videoId)) {
-  // 【新增】嘗試重新載入配置
-  try {
-    console.log(`⚠️ 影片ID ${videoId} 不在當前配置中，嘗試重新載入配置...`);
-    const refreshedConfig = await getUserVideoConfig(true); // 強制刷新
-    const refreshedIds = refreshedConfig.ALL_VIDEO_IDS;
-    
-    if (refreshedIds.includes(videoId)) {
-      console.log(`✅ 重新載入後找到影片 ${videoId}，更新配置`);
-      ALL_VIDEO_IDS = refreshedIds;
-      TRACKED_VIDEOS = refreshedConfig.TRACKED_VIDEOS;
-    } else {
-      return res.status(400).json({
-        success: false,
-        error: `未追蹤的影片ID: ${videoId}`,
-        availableVideos: refreshedIds,
-        suggestion: `請使用以下ID之一: ${refreshedIds.join(', ')}`,
-        note: '如果您剛剛添加了這個影片，可能需要等待幾秒鐘讓配置同步'
-      });
+    // 【修改】驗證影片ID是否在追蹤清單中
+    if (!ALL_VIDEO_IDS.includes(videoId)) {
+      // 【新增】嘗試重新載入配置
+      try {
+        console.log(`⚠️ 影片ID ${videoId} 不在當前配置中，嘗試重新載入配置...`);
+        const refreshedConfig = await getUserVideoConfig(true); // 強制刷新
+        const refreshedIds = refreshedConfig.ALL_VIDEO_IDS;
+        
+        if (refreshedIds.includes(videoId)) {
+          console.log(`✅ 重新載入後找到影片 ${videoId}，更新配置`);
+          ALL_VIDEO_IDS = refreshedIds;
+          TRACKED_VIDEOS = refreshedConfig.TRACKED_VIDEOS;
+        } else {
+          return res.status(400).json({
+            success: false,
+            error: `未追蹤的影片ID: ${videoId}`,
+            availableVideos: refreshedIds,
+            suggestion: `請使用以下ID之一: ${refreshedIds.join(', ')}`,
+            note: '如果您剛剛添加了這個影片，可能需要等待幾秒鐘讓配置同步'
+          });
+        }
+      } catch (refreshError) {
+        console.error('重新載入配置失敗:', refreshError);
+        return res.status(400).json({
+          success: false,
+          error: `未追蹤的影片ID: ${videoId}`,
+          availableVideos: ALL_VIDEO_IDS,
+          suggestion: `請使用以下ID之一: ${ALL_VIDEO_IDS.join(', ')}`
+        });
+      }
     }
-  } catch (refreshError) {
-    console.error('重新載入配置失敗:', refreshError);
-    return res.status(400).json({
-      success: false,
-      error: `未追蹤的影片ID: ${videoId}`,
-      availableVideos: ALL_VIDEO_IDS,
-      suggestion: `請使用以下ID之一: ${ALL_VIDEO_IDS.join(', ')}`
-    });
-  }
-}
 
     // 【修改】從Gist讀取對應影片的數據文件
     const fileName = `youtube-data-${videoId}.json`;  // 每個影片獨立檔案
@@ -413,7 +489,8 @@ if (!ALL_VIDEO_IDS.includes(videoId)) {
 
     if (!response.ok) {
       return res.status(response.status).json({ 
-        error: 'Failed to fetch gist data' 
+        error: 'Failed to fetch gist data',
+        gistError: response.statusText
       });
     }
 
@@ -506,12 +583,12 @@ if (!ALL_VIDEO_IDS.includes(videoId)) {
 
     // 4. 計算統計信息
     let statistics = null;
-    if (stats === 'true' && processedData.length > 0) {
+    if (stats === 'true') {
       // 【修改】首先使用本地數據計算最近 24 小時播放量
+      // 傳入 allData 以獲得更完整的歷史數據
       const last24hFromGist = computeViewsLast24h(allData, Date.now());
       
       // 如果本地計算成功，使用本地結果；否則嘗試使用 Analytics API
-      let last24Result;
       let viewsLast24h;
       let last24hWindow;
       let viewsLast24hSource = 'gist';
@@ -547,7 +624,7 @@ if (!ALL_VIDEO_IDS.includes(videoId)) {
       function getHongKongTodayRange() {
         const now = new Date();
         const hkNow = new Date(now.getTime() + (8 * 3600000));
-        const hkToday = new Date(hkNow.getFullYear(), hkNow.getMonth(), hkNow.getDate());
+        const hkToday = new Date(hkNow.getFullYear(), hkNow.getMonth(), hkToday.getDate());
         const todayStartUTC = hkToday.getTime() - (8 * 3600000);
         const todayEndUTC = todayStartUTC + 24 * 60 * 60 * 1000;
         return { todayStartUTC, todayEndUTC };
@@ -629,53 +706,57 @@ if (!ALL_VIDEO_IDS.includes(videoId)) {
       console.log(`📊 統計信息計算完成，24h來源: ${viewsLast24hSource}`);
     }
 
-// ========== 【修改】獲取影片資訊 ==========
-let videoInfo = Object.values(TRACKED_VIDEOS).find(v => v.id === videoId);
+    // ========== 【修改】獲取影片資訊 ==========
+    let videoInfo = Object.values(TRACKED_VIDEOS).find(v => v.id === videoId);
 
-if (!videoInfo) {
-  console.warn(`⚠️ 未找到影片 ${videoId} 的詳細資訊，使用預設值`);
-  
-  // 【新增】嘗試使用 getVideoById 函數
-  const detailedInfo = getVideoById(videoId);
-  if (detailedInfo) {
-    videoInfo = detailedInfo;
-  } else {
-    // 回退到預設值
-    videoInfo = {
-      id: videoId,
-      name: videoId,
-      color: '#0070f3',
-      description: `YouTube 影片: ${videoId}`,
-      uploadDate: null
-    };
-    
-    // 【新增】如果是有效的YouTube ID格式，嘗試從YouTube獲取名稱
-    if (/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
-      videoInfo.name = `YouTube影片 (${videoId})`;
-      videoInfo.description = `YouTube影片播放量追蹤: ${videoId}`;
+    if (!videoInfo) {
+      console.warn(`⚠️ 未找到影片 ${videoId} 的詳細資訊，使用預設值`);
+      
+      // 【新增】嘗試使用 getVideoById 函數
+      const detailedInfo = getVideoById(videoId);
+      if (detailedInfo) {
+        videoInfo = detailedInfo;
+      } else {
+        // 回退到預設值
+        videoInfo = {
+          id: videoId,
+          name: videoId,
+          color: '#0070f3',
+          description: `YouTube 影片: ${videoId}`,
+          uploadDate: null
+        };
+        
+        // 【新增】如果是有效的YouTube ID格式，嘗試從YouTube獲取名稱
+        if (/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+          videoInfo.name = `YouTube影片 (${videoId})`;
+          videoInfo.description = `YouTube影片播放量追蹤: ${videoId}`;
+        }
+      }
     }
-  }
-}
 
-        // 【新增】優先從YouTube API獲取上載日期
-        let youtubeVideoInfo = null;
-        if (YOUTUBE_API_KEY && /^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
-            youtubeVideoInfo = await getVideoInfoFromYouTube(videoId);
-            
-            if (youtubeVideoInfo) {
-                // 【修改】只使用YouTube API的發佈日期，保留配置中的名稱和描述
-                // 不更新影片名稱和描述，保持配置中的簡潔版本
-                
-                // 【重要】總是使用YouTube API的發佈日期
-                videoInfo.publishDate = youtubeVideoInfo.publishDate;
-                console.log(`✅ 使用YouTube API的發佈日期: ${videoInfo.publishDate}`);
-            }
+    // 【新增】優先從YouTube API獲取上載日期
+    let youtubeVideoInfo = null;
+    if (YOUTUBE_API_KEY && /^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+      try {
+        youtubeVideoInfo = await getVideoInfoFromYouTube(videoId);
+        
+        if (youtubeVideoInfo) {
+          // 【修改】只使用YouTube API的發佈日期，保留配置中的名稱和描述
+          // 不更新影片名稱和描述，保持配置中的簡潔版本
+          
+          // 【重要】總是使用YouTube API的發佈日期
+          videoInfo.publishDate = youtubeVideoInfo.publishDate;
+          console.log(`✅ 使用YouTube API的發佈日期: ${videoInfo.publishDate}`);
         }
+      } catch (ytError) {
+        console.warn(`⚠️ 獲取YouTube影片資訊失敗: ${ytError.message}`);
+      }
+    }
 
-        // 如果沒有從YouTube獲取到發佈日期，使用配置中的
-        if (!videoInfo.publishDate && videoInfo.publishDate !== null) {
-            console.log(`⚠️ 無法從YouTube獲取發佈日期，使用配置中的值: ${videoInfo.publishDate || '無'}`);
-        }
+    // 如果沒有從YouTube獲取到發佈日期，使用配置中的
+    if (!videoInfo.publishDate && videoInfo.publishDate !== null) {
+      console.log(`⚠️ 無法從YouTube獲取發佈日期，使用配置中的值: ${videoInfo.publishDate || '無'}`);
+    }
 
     // ========== 智能返回格式 ==========
     // 檢查是否有查詢參數
@@ -684,57 +765,56 @@ if (!videoInfo) {
     // 設置緩存頭
     res.setHeader('Cache-Control', 'public, max-age=60');
     
-    if (!hasQueryParams) {
-      // 情況1：沒有查詢參數 → 返回舊格式（純數組，完全向後兼容）
-      console.log(`📊 返回影片 ${videoId} 的舊格式，${processedData.length} 條數據`);
-      return res.status(200).json(processedData);
-      
-    } else {
-      // 情況2：有查詢參數 → 返回新格式
-      console.log(`📊 返回影片 ${videoId} 的新格式，${processedData.length} 條數據`);
-      
-      const responseData = {
-        success: true,
-        data: processedData,
-        videoInfo: {
-          id: videoId,
-          name: videoInfo?.name || videoId,
-          color: videoInfo?.color || '#0070f3',
-          description: videoInfo?.description || `YouTube 影片: ${videoId}`,
-          publishDate: videoInfo?.publishDate || null,
-          // 【新增】如果從YouTube獲取了資訊，添加額外字段
-          ...(youtubeVideoInfo ? {
-            youtubeTitle: youtubeVideoInfo.title,
-            channelTitle: youtubeVideoInfo.channelTitle,
-            thumbnailUrl: youtubeVideoInfo.thumbnails?.default?.url
-          } : {})
-        },
-        meta: {
-          requestedAt: new Date().toISOString(),
-          videoId,
-          params: { range, interval, stats, limit },
-          originalCount: allData.length,
-          returnedCount: processedData.length,
-          compatibility: 'new-format',
-          hasLikeCount: processedData.some(item => item.likeCount !== undefined)
-        }
-      };
-
-      // 如果有統計信息，添加到響應中
-      if (statistics) {
-        responseData.statistics = statistics;
+    // 【修改】無論是否有查詢參數，都返回統一格式
+    // 這確保即使影片沒有數據，也不會返回 500
+    const responseData = {
+      success: true,
+      data: processedData,
+      videoInfo: {
+        id: videoId,
+        name: videoInfo?.name || videoId,
+        color: videoInfo?.color || '#0070f3',
+        description: videoInfo?.description || `YouTube 影片: ${videoId}`,
+        publishDate: videoInfo?.publishDate || null,
+        // 【新增】如果從YouTube獲取了資訊，添加額外字段
+        ...(youtubeVideoInfo ? {
+          youtubeTitle: youtubeVideoInfo.title,
+          channelTitle: youtubeVideoInfo.channelTitle,
+          thumbnailUrl: youtubeVideoInfo.thumbnails?.default?.url
+        } : {})
+      },
+      meta: {
+        requestedAt: new Date().toISOString(),
+        videoId,
+        params: { range, interval, stats, limit },
+        originalCount: allData.length,
+        returnedCount: processedData.length,
+        compatibility: 'new-format',
+        hasLikeCount: processedData.some(item => item.likeCount !== undefined)
       }
+    };
 
-      return res.status(200).json(responseData);
+    // 如果有統計信息，添加到響應中
+    if (statistics) {
+      responseData.statistics = statistics;
     }
 
+    console.log(`📊 返回影片 ${videoId} 的數據，${processedData.length} 條記錄`);
+    return res.status(200).json(responseData);
+
   } catch (error) {
-    console.error('Error in chart-data API:', error);
+    // 【修改】改進錯誤處理，避免泄露敏感資訊
+    console.error('❌ [chart-data] Error:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack // 在伺服器端記錄完整堆疊
+    });
     
+    // 回應給前端只保留安全的訊息
     const errorResponse = {
       success: false,
       error: 'Internal server error',
-      message: error.message,
+      message: 'An error occurred while processing your request.',
       timestamp: new Date().toISOString()
     };
     
