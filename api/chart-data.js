@@ -624,7 +624,7 @@ export default async function handler(req, res) {
       function getHongKongTodayRange() {
         const now = new Date();
         const hkNow = new Date(now.getTime() + (8 * 3600000));
-        const hkToday = new Date(hkNow.getFullYear(), hkNow.getMonth(), hkToday.getDate());
+        const hkToday = new Date(hkNow.getFullYear(), hkNow.getMonth(), hkNow.getDate());
         const todayStartUTC = hkToday.getTime() - (8 * 3600000);
         const todayEndUTC = todayStartUTC + 24 * 60 * 60 * 1000;
         return { todayStartUTC, todayEndUTC };
