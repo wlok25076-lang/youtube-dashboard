@@ -21,7 +21,7 @@ const YOUTUBE_CHANNEL_ID = process.env.YOUTUBE_CHANNEL_ID;
 let TRACKED_VIDEOS = DEFAULT_TRACKED_VIDEOS;
 let ALL_VIDEO_IDS = DEFAULT_ALL_VIDEO_IDS;
 
-// 【新增】從 YouTube Analytics API 獲取最近 24 小時播放量（使用整點計算）
+// 【修正】從 YouTube Analytics API 獲取最近 24 小時播放量
 async function getLast24ViewsHourly(channelId, localTimezone = "Asia/Hong_Kong") {
     if (!YOUTUBE_ANALYTICS_API_KEY || !channelId) {
         console.warn('⚠️ 缺少 YouTube Analytics API Key 或 Channel ID，無法獲取 24h 數據');
@@ -30,78 +30,50 @@ async function getLast24ViewsHourly(channelId, localTimezone = "Asia/Hong_Kong")
 
     try {
         const now = new Date();
+        const nowMs = now.getTime();
         
-        // ========== 本地時區計算 ==========
-        // 根據時區計算時區偏移（分鐘）
-        let localOffsetMinutes;
-        if (localTimezone === "Asia/Hong_Kong") {
-            localOffsetMinutes = 8 * 60; // UTC+8
-        } else if (localTimezone === "America/Chicago") {
-            localOffsetMinutes = -6 * 60; // UTC-6 (標準時間)
-        } else if (localTimezone === "America/Los_Angeles") {
-            localOffsetMinutes = -8 * 60; // UTC-8 (標準時間) 或 UTC-7 (夏令時間)
-        } else {
-            localOffsetMinutes = now.getTimezoneOffset();
-        }
-
-        // 計算本地時間的現在時刻
-        const nowLocal = new Date(now.getTime() + (localOffsetMinutes * 60 * 1000));
-        
-        // 計算本地時間的上一個整點（end_local）
-        const endLocal = new Date(nowLocal);
-        endLocal.setMinutes(0, 0, 0);
-        
-        // 計算 start_local = end_local - 24 hours
-        const startLocal = new Date(endLocal.getTime() - 24 * 60 * 60 * 1000);
-
-        // ========== 太平洋時區轉換 ==========
-        // YouTube Analytics 使用 Pacific 時間（America/Los_Angeles）邊界
-        // 需要將本地時間轉換到太平洋時間
+        // ========== 計算太平洋時區（YouTube Analytics 使用 Pacific 時間）==========
         // Pacific Time: UTC-8 (標準) 或 UTC-7 (夏令)
-        
-        // 計算太平洋時區偏移
-        const pacificOffset = -8 * 60; // 標準時間 UTC-8
-        const nowPacific = new Date(now.getTime() + (pacificOffset * 60 * 1000));
         
         // 檢查是否為夏令時間（太平洋時間）
         // 夏令時：3月第二個週日 2:00 到 11月第一個週日 2:00
-        const month = nowPacific.getMonth(); // 0-11
-        const dayOfMonth = nowPacific.getDate();
-        const dayOfWeek = nowPacific.getDay(); // 0-6 (週日)
+        const month = now.getUTCMonth(); // 0-11，使用 UTC 避免本地時區影響
+        const dayOfMonth = now.getUTCDate();
+        const dayOfWeek = now.getUTCDay(); // 0-6 (週日)
         
         let isDST = false;
-        if (month >= 3 && month <= 10) {
-            // 3月到10月可能是夏令時
+        if (month >= 2 && month <= 10) {
             if (month > 3 && month < 10) {
                 isDST = true;
             } else if (month === 3) {
-                // 3月：第二個週日開始夏令時
                 const secondSunday = 8 + (7 - dayOfWeek) % 7;
                 if (dayOfMonth >= secondSunday) isDST = true;
             } else if (month === 10) {
-                // 11月：第一個週日結束夏令時
                 const firstSunday = 1 + (7 - dayOfWeek) % 7;
                 if (dayOfMonth < firstSunday) isDST = true;
             }
         }
         
-        const finalPacificOffset = isDST ? -7 * 60 : -8 * 60;
+        const pacificOffsetMs = isDST ? -7 * 60 * 60 * 1000 : -8 * 60 * 60 * 1000;
         
-        // 將本地時間的整點轉換到太平洋時間
-        const endPacificTime = new Date(endLocal.getTime() + (finalPacificOffset * 60 * 1000));
-        const startPacificTime = new Date(startLocal.getTime() + (finalPacificOffset * 60 * 1000));
-
+        // ========== 計算最近 24 小時的時間範圍 ==========
+        // 結束時間：太平洋時間的現在時刻（取整點）
+        const nowPacificMs = nowMs + pacificOffsetMs;
+        const endPacific = new Date(nowPacificMs);
+        endPacific.setUTCMinutes(0, 0, 0); // 整點
+        
+        // 開始時間：結束時間 - 24 小時
+        const startPacific = new Date(endPacific.getTime() - 24 * 60 * 60 * 1000);
+        
         // 格式化日期給 API
-        const startDate = startPacificTime.toISOString().split('T')[0]; // YYYY-MM-DD
-        const endDate = endPacificTime.toISOString().split('T')[0];     // YYYY-MM-DD
-
+        const startDate = startPacific.toISOString().split('T')[0]; // YYYY-MM-DD
+        const endDate = endPacific.toISOString().split('T')[0];     // YYYY-MM-DD
+        
         console.log(`📊 [24h Views] 計算窗口`);
-        console.log(`   本地時區: ${localTimezone}`);
         console.log(`   太平洋時區: ${isDST ? 'PDT (UTC-7)' : 'PST (UTC-8)'}`);
-        console.log(`   start_local: ${startLocal.toISOString()}`);
-        console.log(`   end_local: ${endLocal.toISOString()}`);
-        console.log(`   start_pacific: ${startPacificTime.toISOString()}`);
-        console.log(`   end_pacific: ${endPacificTime.toISOString()}`);
+        console.log(`   start_pacific: ${startPacific.toISOString()}`);
+        console.log(`   end_pacific: ${endPacific.toISOString()}`);
+        console.log(`   API日期範圍: ${startDate} 到 ${endDate}`);
 
         // ========== 使用 day,hour 維度獲取小時數據 ==========
         const url = `${YOUTUBE_ANALYTICS_API_BASE}?ids=channel==${channelId}&startDate=${startDate}&endDate=${endDate}&metrics=views&dimensions=day,hour&timeZone=America/Los_Angeles&key=${YOUTUBE_ANALYTICS_API_KEY}`;
@@ -110,6 +82,8 @@ async function getLast24ViewsHourly(channelId, localTimezone = "Asia/Hong_Kong")
         
         if (!response.ok) {
             console.error(`❌ [24h Views] API 錯誤: ${response.status}`);
+            const errorText = await response.text();
+            console.error(`API錯誤詳情: ${errorText}`);
             return { views_last_24h: 0, last_24h_window: null, error: `API ${response.status}` };
         }
         
@@ -119,6 +93,8 @@ async function getLast24ViewsHourly(channelId, localTimezone = "Asia/Hong_Kong")
             console.warn('⚠️ [24h Views] 無數據返回');
             return { views_last_24h: 0, last_24h_window: null, error: 'no_data' };
         }
+        
+        console.log(`📊 [24h Views] API返回 ${data.rows.length} 行數據`);
         
         // 解析 columnHeaders 確認欄位順序
         const headers = data.columnHeaders || [];
@@ -137,17 +113,14 @@ async function getLast24ViewsHourly(channelId, localTimezone = "Asia/Hong_Kong")
         if (hourIndex === -1) hourIndex = 1;
         if (viewsIndex === -1) viewsIndex = 2;
         
-        console.log(`📊 [24h Views] 欄位順序: day=${dayIndex}, hour=${hourIndex}, views=${viewsIndex}`);
-
         // ========== 篩選並加總 ==========
-        // 轉換 Pacific 時間範圍為 Date 對象進行比較
-        const startPacificMs = startPacificTime.getTime();
-        const endPacificMs = endPacificTime.getTime();
+        const startPacificMs = startPacific.getTime();
+        const endPacificMs = endPacific.getTime();
         
         let totalViews = 0;
         let validRows = 0;
         
-        data.rows.forEach(row => {
+        data.rows.forEach((row, idx) => {
             // 解析 day 和 hour
             const dayStr = row[dayIndex]; // YYYY-MM-DD
             const hour = parseInt(row[hourIndex]); // 0-23
@@ -155,26 +128,39 @@ async function getLast24ViewsHourly(channelId, localTimezone = "Asia/Hong_Kong")
             
             // 組成 Pacific datetime
             const [year, month, day] = dayStr.split('-').map(Number);
-            const dtPacific = new Date(year, month - 1, day, hour, 0, 0, 0);
+            const dtPacific = new Date(Date.UTC(year, month - 1, day, hour, 0, 0, 0));
             const dtMs = dtPacific.getTime();
             
-            // 篩選：start_pacific <= dt < end_pacific
+            // 篩選：start <= dt < end
             if (dtMs >= startPacificMs && dtMs < endPacificMs) {
                 totalViews += views;
                 validRows++;
-                console.log(`   [24h] ${dayStr} ${hour.toString().padStart(2, '0')}:00 → +${views}`);
+                console.log(`   [24h] ${idx}: ${dayStr} ${hour.toString().padStart(2, '0')}:00 (Pacific) → +${views} views`);
             }
         });
 
         console.log(`✅ [24h Views] 總計: ${totalViews} views (${validRows} 小時有效數據)`);
 
-        // 返回結果
+        // ========== 返回結果 ==========
+        // 計算本地時區的時間窗口用於顯示
+        let localOffsetMinutes;
+        if (localTimezone === "Asia/Hong_Kong") {
+            localOffsetMinutes = 8 * 60;
+        } else {
+            localOffsetMinutes = now.getTimezoneOffset();
+        }
+        
+        const startLocal = new Date(startPacificMs - localOffsetMinutes * 60 * 1000);
+        const endLocal = new Date(endPacificMs - localOffsetMinutes * 60 * 1000);
+
         return {
             views_last_24h: totalViews,
             last_24h_window: {
                 start: startLocal.toISOString(),
                 end: endLocal.toISOString(),
-                timezone: localTimezone
+                timezone: localTimezone,
+                pacificStart: startPacific.toISOString(),
+                pacificEnd: endPacific.toISOString()
             }
         };
         
