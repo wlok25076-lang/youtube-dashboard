@@ -2634,8 +2634,8 @@ async function updateVideoInBackend(videoData) {
                     videoIdSpan.textContent = `(${currentVideoId})`;
                 }
                 
-                // 【移除】不再在 #status 區域顯示詳細狀態，改為簡化提示
-                statusDiv.innerHTML = `✅ 影片 ${currentVideoId}`;
+                // 【移除】不再在 #status 區域顯示任何內容（改為隱藏）
+                statusDiv.style.display = 'none';
 
             } catch (error) {
                 console.error('獲取圖表數據失敗:', error);
