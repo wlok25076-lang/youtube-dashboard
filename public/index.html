@@ -1424,7 +1424,9 @@
 
         <!-- 表格区域 -->
         <div id="dataTableContainer">
-            <h2>📋 詳細數據</h2>
+            <!-- 【修改】标题旁边显示当前影片ID -->
+            <h2 style="display: inline-block; margin-right: 10px;">📋 詳細數據</h2>
+            <span id="dataTableVideoId" style="color: var(--secondary-color); font-size: 14px;"></span>
             <table id="dataTable">
                 <thead>
                     <tr>
@@ -1441,6 +1443,11 @@
             </table>
         </div>
     </div>
+
+    <!-- 【新增】Footer 區域 -->
+    <footer id="app-footer" style="margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--border-color);">
+        <div id="update-status" style="font-size: 12px; color: var(--secondary-color); text-align: center; font-style: italic;"></div>
+    </footer>
 
     <!-- Quota Display Component -->
     <script src="quota-display.js"></script>
@@ -2613,7 +2620,22 @@ async function updateVideoInBackend(videoData) {
                 });
                 
                 const totalRecords = apiStats ? apiStats.summary?.totalRecords : data.length;
-                statusDiv.innerHTML = `✅ 影片 ${currentVideoId} 數據已更新: ${lastUpdateTime.toLocaleDateString()} ${timeStr} | 共 ${totalRecords} 筆記錄`;
+                const updateStatus = `✅ 數據已更新: ${lastUpdateTime.toLocaleDateString()} ${timeStr} | 共 ${totalRecords} 筆記錄`;
+                
+                // 【修改】將更新狀態顯示在 footer
+                const footerStatus = document.getElementById('update-status');
+                if (footerStatus) {
+                    footerStatus.textContent = updateStatus;
+                }
+                
+                // 【新增】在詳細數據標題旁邊顯示影片ID
+                const videoIdSpan = document.getElementById('dataTableVideoId');
+                if (videoIdSpan) {
+                    videoIdSpan.textContent = `(${currentVideoId})`;
+                }
+                
+                // 【移除】不再在 #status 區域顯示詳細狀態，改為簡化提示
+                statusDiv.innerHTML = `✅ 影片 ${currentVideoId}`;
 
             } catch (error) {
                 console.error('獲取圖表數據失敗:', error);
