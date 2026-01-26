@@ -1,6 +1,6 @@
 // api/chart-data.js - 【完整修改版】
-const GIST_ID = process.env.GIST_ID;
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+import { requireEnv, sendEnvError } from './_lib/env.js';
+
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3/videos';
 
@@ -425,18 +425,10 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // 【修改】改進環境變數缺失時的錯誤訊息
-  const missingEnvVars = [];
-  if (!GIST_ID) missingEnvVars.push('GIST_ID');
-  if (!GITHUB_TOKEN) missingEnvVars.push('GITHUB_TOKEN');
-  
-  if (missingEnvVars.length > 0) {
-    const errorMsg = `Server configuration error: missing ${missingEnvVars.join(', ')}. Please set these environment variables in Vercel.`;
-    console.error(`❌ ${errorMsg}`);
-    return res.status(500).json({ 
-      error: errorMsg,
-      missingVars: missingEnvVars
-    });
+  // 【修改】使用 requireEnv 檢查必要環境變數
+  const env = requireEnv(['GIST_ID', 'GITHUB_TOKEN']);
+  if (!env.ok) {
+    return sendEnvError(res, env.missing, { endpoint: 'chart-data' });
   }
 
   try {
@@ -505,9 +497,9 @@ export default async function handler(req, res) {
     const fileName = `youtube-data-${videoId}.json`;  // 每個影片獨立檔案
     
     // 先嘗試讀取影片特定檔案
-    const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+    const response = await fetch(`https://api.github.com/gists/${env.values.GIST_ID}`, {
       headers: {
-        'Authorization': `token ${GITHUB_TOKEN}`,
+        'Authorization': `token ${env.values.GITHUB_TOKEN}`,
         'User-Agent': 'vercel-app'
       }
     });
