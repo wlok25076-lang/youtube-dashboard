@@ -139,19 +139,55 @@
 ```
 youtube-dashboard/
 ├── api/
-│   ├── chart-data.js         # 數據 API（主功能）
-│   ├── fetch-and-store-multi.js # 影片管理 API
-│   ├── quota-status.js       # 配額監控 API
-│   ├── quota-manager.js      # 配額管理工具
-│   └── videos-config.js      # 影片配置
+│   ├── chart-data.js              # 數據 API（主功能）
+│   ├── fetch-and-store-multi.js   # 影片管理 API
+│   ├── quota-status.js            # 配額監控 API
+│   ├── quota-manager.js           # 配額管理工具
+│   └── videos-config.js           # 影片配置
 ├── public/
-│   ├── index.html            # 主頁面
-│   ├── quota-display.js      # 配額顯示組件
-│   └── quota-display.css     # 配額顯示樣式
-├── vercel.json               # Vercel 設定
+│   ├── index.html                 # 主頁面
+│   ├── quota-display.js           # 配額顯示組件
+│   ├── quota-display.css          # 配額顯示樣式
+│   └── test-compatibility.html    # 相容性測試頁面
+├── scripts/
+│   └── test-24h-views.js          # 24小時播放量計算測試
+├── .env.example                   # 環境變數範本
+├── vercel.json                    # Vercel 設定
 ├── package.json
 └── README.md
 ```
+
+## 🚀 本地啟動
+
+```bash
+# 安裝依賴
+npm install
+
+# 啟動本地開發伺服器
+npm run dev
+
+# 開啟 http://localhost:3000
+
+# 執行測試
+node scripts/test-24h-views.js
+```
+
+## ☁️ 部署到 Vercel
+
+### 環境變數設定
+
+在 Vercel Dashboard 的 **Settings → Environment Variables** 中添加以下變數：
+
+| 變數名稱 | 說明 | 必填 |
+|---------|------|------|
+| `YOUTUBE_API_KEY` | YouTube Data API Key | ✅ |
+| `YOUTUBE_ANALYTICS_API_KEY` | YouTube Analytics API Key | ✅ |
+| `YOUTUBE_CHANNEL_ID` | YouTube Channel ID | ✅ |
+| `GITHUB_TOKEN` | GitHub Personal Access Token | ✅ |
+| `GIST_ID` | GitHub Gist ID（存儲影片清單） | ✅ |
+| `ADMIN_PASSWORD` | 管理功能密碼 | ✅ |
+
+**注意：** 確保 `.env` 檔案不要提交到版本控制。
 
 ## 📊 最近 24 小時播放量
 
@@ -184,7 +220,7 @@ youtube-dashboard/
 
 ### 測試
 ```bash
-npm test  # 運行 test-24h-views.js 測試最近 24 小時計算功能
+node scripts/test-24h-views.js  # 測試最近 24 小時計算功能
 ```
 
 ## 🔒 安全注意事項

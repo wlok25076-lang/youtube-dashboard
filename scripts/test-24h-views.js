@@ -397,7 +397,7 @@ function runTests() {
     
     // 測試數據：今日香港時區的數據
     const hkNow = new Date(FIXED_NOW + (8 * 3600000));
-    const hkTodayStart = new Date(hkNow.getFullYear(), hkNow.getMonth(), hkNow.getDate());
+    const hkTodayStart = new Date(hkNow.getFullYear(), hkNow.getMonth(), hkToday.getDate());
     const hkTodayStartUTC = hkTodayStart.getTime() - (8 * 3600000);
     
     const todayGrowthData = [

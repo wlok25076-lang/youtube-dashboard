@@ -35,12 +35,10 @@ export function requireEnv(keys) {
  * @param {Response} res - Vercel Response 物件
  * @param {string[]} missing - 缺失的環境變數列表
  * @param {object} [extra={}] - 額外的錯誤資訊
+ * @returns {Response} - 可用於 return sendEnvError(...)
  */
 export function sendEnvError(res, missing, extra = {}) {
-    res.statusCode = 500;
-    res.setHeader("Content-Type", "application/json; charset=utf-8");
-    
-    res.json({
+    return res.status(500).json({
         ok: false,
         error: {
             code: "MISSING_ENV",
@@ -56,9 +54,8 @@ export function sendEnvError(res, missing, extra = {}) {
  * @param {Response} res - Vercel Response 物件
  * @param {number} status - HTTP 狀態碼
  * @param {object} data - 要回傳的資料
+ * @returns {Response} - 可用於 return sendJson(...)
  */
 export function sendJson(res, status, data) {
-    res.statusCode = status;
-    res.setHeader("Content-Type", "application/json; charset=utf-8");
-    res.json(data);
+    return res.status(status).json(data);
 }

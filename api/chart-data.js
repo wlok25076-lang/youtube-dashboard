@@ -1,4 +1,4 @@
-// api/chart-data.js - 【完整修改版】
+// api/chart-data.js
 import { requireEnv, sendEnvError } from './_lib/env.js';
 
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
