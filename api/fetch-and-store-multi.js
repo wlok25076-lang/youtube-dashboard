@@ -218,6 +218,12 @@ export default async function handler(req, res) {
 
     // ==================== 除錯模式 ====================
     if (req.query.debug === '1') {
+        // 【安全硬化】Production 環境禁止 debug 模式，回 404
+        if (process.env.NODE_ENV === 'production') {
+            console.warn('⚠️ [debug] Production 環境拒絕 debug 請求，回傳 404');
+            return res.status(404).json({ error: 'Not Found' });
+        }
+
         const authHeader = req.headers.authorization;
         const tokenFromQuery = req.query.token || req.query.auth;
         
@@ -248,10 +254,21 @@ export default async function handler(req, res) {
     }
 
     // 2. 生產環境認證檢查（兼容 cron-job.org）
-    // 【臨時】允許通過環境變數跳過認證以進行調試
-    const skipAuth = process.env.ENABLE_CRON_AUTH === 'false';
+    // 【安全硬化】Production 環境禁止跳過認證
+    // 只有在非 production 環境時，ENABLE_CRON_AUTH=false 才有效
+    const isProduction = process.env.NODE_ENV === 'production';
+    const skipAuth = !isProduction && process.env.ENABLE_CRON_AUTH === 'false';
     
-    if (process.env.NODE_ENV === 'production' && !skipAuth) {
+    if (isProduction) {
+        // Production：強制驗證，ENABLE_CRON_AUTH=false 在此環境無效
+        console.log(`🔒 [cron-auth] Production 環境：強制驗證，ENABLE_CRON_AUTH 被忽略`);
+    } else if (skipAuth) {
+        console.log(`⚠️ [cron-auth] 非 Production 環境：認證已通過 ENABLE_CRON_AUTH=false 臨時跳過（僅用於開發調試）`);
+    } else {
+        console.log(`🔒 [cron-auth] 非 Production 環境：需要認證`);
+    }
+    
+    if (isProduction && !skipAuth) {
         const authHeader = req.headers.authorization;
         const expectedHeader = `Bearer ${CRON_AUTH_TOKEN}`;
         const tokenFromQuery = req.query.token || req.query.auth;
@@ -307,9 +324,6 @@ export default async function handler(req, res) {
         }
         
         console.log('✅ 認證成功，開始處理數據收集任務');
-    } else if (process.env.NODE_ENV === 'production' && skipAuth) {
-        console.log('⚠️ 警告：生產環境認證已通過 ENABLE_CRON_AUTH=false 臨時跳過');
-        console.log('   這僅用於調試，完成後請恢復認證');
     }
 
     // 3. 檢查必要環境變數

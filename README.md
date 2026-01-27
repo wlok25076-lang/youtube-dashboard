@@ -87,9 +87,11 @@
      ```bash
      npm run dev:static
      ```
-     打開 http://localhost:3000
+     這會啟動靜態伺服器（支援 SPA fallback），打開 http://localhost:3000
 
-   > ⚠️ **注意**：請勿將 `vercel dev` 放在 `scripts.dev` 中，否則 Vercel CLI 會被誤認為是 Development Command，導致遞迴呼叫（recursive invocation）問題。
+   > ⚠️ **注意**：請在 repo 根目錄執行此指令。`-s` 參數用於 Single Page Application fallback，可避免路由或頁面刷新時出現 404。
+   >
+   > 請勿將 `vercel dev` 放在 `scripts.dev` 中，否則 Vercel CLI 會被誤認為是 Development Command，導致遞迴呼叫（recursive invocation）問題。
 
 ## 🚀 部署到 Vercel
 
@@ -235,6 +237,20 @@ node scripts/test-24h-views.js
 ```bash
 node scripts/test-24h-views.js  # 測試最近 24 小時計算功能
 ```
+
+## 🧹 Git history cleanup（可選）
+
+如需清理 Git history（例如移除敏感資料或大檔案），請使用 [git-filter-repo](https://github.com/newren/git-filter-repo) 工具：
+
+```bash
+# 安裝（需 Python）
+pip install git-filter-repo
+
+# 範例：移除大檔案
+git filter-repo --path-glob '大檔案名稱' --invert-paths
+```
+
+**注意**：此工具不應加入專案 repo，請自行安裝使用。
 
 ## 🔒 安全注意事項
 
