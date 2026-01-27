@@ -20,6 +20,56 @@ const YOUTUBE_CHANNEL_ID = process.env.YOUTUBE_CHANNEL_ID;
 // 【新增】全域常量
 const MS_24H = 24 * 60 * 60 * 1000; // 24小時的毫秒數
 
+// ========== 【新增】In-Memory Cache ==========
+const GIST_CACHE_TTL = 60 * 1000; // 60 秒
+const YOUTUBE_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 小時
+
+let cacheGist = { value: null, expiresAt: 0 };
+const cacheYoutubeInfo = new Map(); // videoId -> { value, expiresAt }
+
+/**
+ * 檢查並返回有效的 gist cache
+ * @returns {{ gistData: object, cacheStatus: 'hit' | 'miss' } | null}
+ */
+function getCachedGist() {
+    if (cacheGist.value && Date.now() < cacheGist.expiresAt) {
+        return { gistData: cacheGist.value, cacheStatus: 'hit' };
+    }
+    return null;
+}
+
+/**
+ * 設置 gist cache
+ */
+function setGistCache(gistData) {
+    cacheGist = {
+        value: gistData,
+        expiresAt: Date.now() + GIST_CACHE_TTL
+    };
+}
+
+/**
+ * 檢查並返回有效的 YouTube cache
+ * @returns {{ videoInfo: object, cacheStatus: 'hit' | 'miss' } | null}
+ */
+function getCachedYoutubeInfo(videoId) {
+    const cached = cacheYoutubeInfo.get(videoId);
+    if (cached && Date.now() < cached.expiresAt) {
+        return { videoInfo: cached.value, cacheStatus: 'hit' };
+    }
+    return null;
+}
+
+/**
+ * 設置 YouTube cache
+ */
+function setYoutubeCache(videoId, videoInfo) {
+    cacheYoutubeInfo.set(videoId, {
+        value: videoInfo,
+        expiresAt: Date.now() + YOUTUBE_CACHE_TTL
+    });
+}
+
 // 【新增】時間戳正規化 helper
 // 支援 number timestamp 與 ISO string
 // 無法解析時返回 null 並打印 warn
@@ -431,6 +481,16 @@ export default async function handler(req, res) {
     return sendEnvError(res, env.missing, { endpoint: 'chart-data' });
   }
 
+  // 【新增】Debug probe（非 production）
+  if (process.env.NODE_ENV !== 'production') {
+    globalThis.__chartDataProbe = (globalThis.__chartDataProbe || 0) + 1;
+    console.log('[chart-data] probe', { 
+      count: globalThis.__chartDataProbe, 
+      expiresAt: cacheGist.expiresAt, 
+      now: Date.now() 
+    });
+  }
+
   try {
     // 【修改】動態獲取最新影片配置
     const config = await getUserVideoConfig();
@@ -456,10 +516,12 @@ export default async function handler(req, res) {
       interval,    
       stats,       
       limit,
-      refreshConfig
+      refreshConfig,
+      includeVideoInfo  // 【新增】控制是否獲取 YouTube 影片資訊
     } = req.query;
 
-    console.log(`📡 API請求: videoId=${videoId}, range=${range}, interval=${interval}`);
+    const shouldIncludeVideoInfo = includeVideoInfo === 'true';
+    console.log(`📡 API請求: videoId=${videoId}, range=${range}, interval=${interval}, includeVideoInfo=${shouldIncludeVideoInfo}`);
 
     // 【修改】驗證影片ID是否在追蹤清單中
     if (!ALL_VIDEO_IDS.includes(videoId)) {
@@ -493,25 +555,55 @@ export default async function handler(req, res) {
       }
     }
 
-    // 【修改】從Gist讀取對應影片的數據文件
+    // 【修改】從Gist讀取對應影片的數據文件（使用 Cache）
     const fileName = `youtube-data-${videoId}.json`;  // 每個影片獨立檔案
     
-    // 先嘗試讀取影片特定檔案
-    const response = await fetch(`https://api.github.com/gists/${env.values.GIST_ID}`, {
-      headers: {
-        'Authorization': `token ${env.values.GITHUB_TOKEN}`,
-        'User-Agent': 'vercel-app'
-      }
-    });
+    // 初始化 cache 狀態
+    let cacheGistStatus = 'miss';
+    let cacheYoutubeStatus = 'skipped';
+    
+    // Gist cache 邏輯：直接使用 module-scope cacheGist 變數
+    const now = Date.now();
+    let gistData;
+    
+    if (cacheGist.value && now < cacheGist.expiresAt) {
+      // Cache hit
+      gistData = cacheGist.value;
+      cacheGistStatus = 'hit';
+    } else {
+      // Cache miss，fetch from GitHub
+      const response = await fetch(`https://api.github.com/gists/${env.values.GIST_ID}`, {
+        headers: {
+          'Authorization': `token ${env.values.GITHUB_TOKEN}`,
+          'User-Agent': 'vercel-app'
+        }
+      });
 
-    if (!response.ok) {
-      return res.status(response.status).json({ 
-        error: 'Failed to fetch gist data',
-        gistError: response.statusText
+      if (!response.ok) {
+        return res.status(response.status).json({ 
+          error: 'Failed to fetch gist data',
+          gistError: response.statusText
+        });
+      }
+
+      gistData = await response.json();
+      
+      // 設置 gist cache
+      cacheGist = {
+        value: gistData,
+        expiresAt: now + 60 * 1000  // TTL: 60 秒
+      };
+      cacheGistStatus = 'miss';
+    }
+    
+    // Debug log（非 production）
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[chart-data] gistCache', { 
+        hit: cacheGistStatus === 'hit', 
+        expiresAt: cacheGist.expiresAt, 
+        now 
       });
     }
-
-    const gistData = await response.json();
     
     let allData = [];
     
@@ -751,23 +843,42 @@ export default async function handler(req, res) {
       }
     }
 
-    // 【新增】優先從YouTube API獲取上載日期
+    // 【修改】從YouTube API獲取影片資訊（使用 includeVideoInfo 參數控制）
     let youtubeVideoInfo = null;
-    if (YOUTUBE_API_KEY && /^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
-      try {
-        youtubeVideoInfo = await getVideoInfoFromYouTube(videoId);
-        
-        if (youtubeVideoInfo) {
-          // 【修改】只使用YouTube API的發佈日期，保留配置中的名稱和描述
-          // 不更新影片名稱和描述，保持配置中的簡潔版本
+    
+    if (shouldIncludeVideoInfo && YOUTUBE_API_KEY && /^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+      // 檢查 YouTube cache
+      const cachedYoutube = getCachedYoutubeInfo(videoId);
+      
+      if (cachedYoutube) {
+        // Cache hit
+        youtubeVideoInfo = cachedYoutube.videoInfo;
+        cacheYoutubeStatus = 'hit';
+        console.log(`📦 [cache] YouTube cache hit for ${videoId}`);
+      } else {
+        // Cache miss，fetch from YouTube
+        try {
+          youtubeVideoInfo = await getVideoInfoFromYouTube(videoId);
           
-          // 【重要】總是使用YouTube API的發佈日期
-          videoInfo.publishDate = youtubeVideoInfo.publishDate;
-          console.log(`✅ 使用YouTube API的發佈日期: ${videoInfo.publishDate}`);
+          if (youtubeVideoInfo) {
+            // 設置 YouTube cache
+            setYoutubeCache(videoId, youtubeVideoInfo);
+            cacheYoutubeStatus = 'miss';
+            console.log(`💾 [cache] YouTube data cached for ${videoId} (TTL: 6h)`);
+          }
+        } catch (ytError) {
+          console.warn(`⚠️ 獲取YouTube影片資訊失敗: ${ytError.message}`);
+          cacheYoutubeStatus = 'error';
         }
-      } catch (ytError) {
-        console.warn(`⚠️ 獲取YouTube影片資訊失敗: ${ytError.message}`);
       }
+      
+      if (youtubeVideoInfo) {
+        videoInfo.publishDate = youtubeVideoInfo.publishDate;
+        console.log(`✅ 使用YouTube API的發佈日期: ${videoInfo.publishDate}`);
+      }
+    } else {
+      // 不獲取 YouTube 影片資訊，保持 youtubeVideoInfo 為 null
+      console.log(`⏭️ [cache] YouTube API 跳過（includeVideoInfo=${shouldIncludeVideoInfo}）`);
     }
 
     // 如果沒有從YouTube獲取到發佈日期，使用配置中的
@@ -803,11 +914,16 @@ export default async function handler(req, res) {
       meta: {
         requestedAt: new Date().toISOString(),
         videoId,
-        params: { range, interval, stats, limit },
+        params: { range, interval, stats, limit, includeVideoInfo },
         originalCount: allData.length,
         returnedCount: processedData.length,
         compatibility: 'new-format',
-        hasLikeCount: processedData.some(item => item.likeCount !== undefined)
+        hasLikeCount: processedData.some(item => item.likeCount !== undefined),
+        // 【新增】Cache 狀態
+        cache: {
+          gist: cacheGistStatus,
+          youtube: cacheYoutubeStatus
+        }
       }
     };
 

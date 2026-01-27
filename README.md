@@ -128,22 +128,42 @@
 - `interval` - 數據間隔（hourly、daily）
 - `stats` - 是否包含統計信息（true/false）
 - `limit` - 返回記錄數限制
+- `includeVideoInfo` - 是否獲取 YouTube 影片資訊（true/false，預設 false）
+
+**⚠️ 配額保護說明：**
+
+- `includeVideoInfo` 預設為 `false`，此時不會呼叫 YouTube Data API，節省 API 配額
+- 只有當需要顯示縮圖、頻道名稱等額外資訊時，才建議設為 `true`
+- 影片資訊會快取 6 小時，重複請求不會消耗額外配額
+
+**回應中的 cache 狀態（meta.cache）：**
+- `gist` - Gist 資料快取狀態：`hit`（命中）或 `miss`（未命中）
+- `youtube` - YouTube 資訊快取狀態：`hit`（命中）、`miss`（未命中）或 `skipped`（未請求）
 
 **範例：**
 ```
 /api/chart-data?videoId=m2ANkjMRuXc&stats=true
+/api/chart-data?videoId=m2ANkjMRuXc&includeVideoInfo=true  # 獲取影片縮圖等資訊
 ```
 
 ### `/api/fetch-and-store-multi`
-影片管理 API。
+影片管理 API，同時包含定時收數（cron）與影片管理操作功能。
 
-**動作：**
+**動作（管理操作）：**
 - `get` - 獲取影片清單
 - `add` - 新增影片
 - `update` - 更新影片
 - `delete` - 刪除影片
 - `verify` - 驗證密碼
 - `getTitle` - 獲取影片標題
+
+**⚠️ 安全說明：**
+
+- **定時收數（cron）**：在 Production 環境下必須帶授權，否則會回 401。可使用以下方式：
+  - Header: `Authorization: Bearer <CRON_AUTH_TOKEN>`
+  - Query: `?token=<CRON_AUTH_TOKEN>` 或 `?auth=<CRON_AUTH_TOKEN>`
+
+- **debug 模式**：`debug=1` 參數只允許在非 Production 環境使用。Production 下會回 404，避免洩漏環境資訊。
 
 ### `/api/quota-status`
 獲取 YouTube API 配額使用情況。
@@ -185,6 +205,34 @@ npm run dev:static
 
 # 執行測試
 node scripts/test-24h-views.js
+```
+
+## ✅ 本地驗證
+
+在部署前，可使用以下指令驗證安全機制是否正常運作：
+
+**A) Development 環境：debug=1 應回 200**
+```bash
+npm run dev:vercel
+curl -i "http://localhost:3000/api/fetch-and-store-multi?debug=1"
+# 預期：HTTP 200，回傳包含環境資訊的 JSON
+```
+
+**B) Production 環境：debug=1 應回 404**
+```cmd
+REM Windows CMD
+set NODE_ENV=production
+npm run dev:vercel
+curl -i "http://localhost:3000/api/fetch-and-store-multi?debug=1"
+# 預期：HTTP 404，回傳 { error: 'Not Found' }
+```
+
+> 💡 PowerShell 使用者若遇到執行原則限制，可改用 CMD 執行，或使用 `Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process`。
+
+**C) Production 環境：未帶 token 應回 401**
+```bash
+curl -i "http://localhost:3000/api/fetch-and-store-multi"
+# 預期：HTTP 401，回傳 Unauthorized 錯誤
 ```
 
 ## ☁️ 部署到 Vercel
@@ -258,6 +306,14 @@ git filter-repo --path-glob '大檔案名稱' --invert-paths
 - GitHub Token 應設定最小權限（僅 Gist 讀寫）
 - 定期輪換 API Key 和 Token
 - 不要將環境變數提交到版本控制
+
+### Cron / Debug 安全硬化
+
+本專案針對定時收數與除錯功能做了以下安全強化：
+
+- **Production 禁止 debug=1**：在 Production 環境下，`debug=1` 參數會回傳 404，而非環境資訊，避免洩漏敏感設定。
+- **Production 禁止跳過 cron 認證**：`ENABLE_CRON_AUTH=false` 環境變數僅在非 Production 環境有效。Production 環境下強制要求 `CRON_AUTH_TOKEN` 授權。
+- **建議 CRON_AUTH_TOKEN 使用隨機長字串**（建議 32+ 字元），並定期輪換以降低洩漏風險。
 
 ## 📄 授權
 
