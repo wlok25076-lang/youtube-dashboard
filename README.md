@@ -74,10 +74,22 @@
    ```
 
 4. **本機測試**
-   ```bash
-   npm run dev
-   ```
-   打開 http://localhost:3000
+
+   有兩種方式：
+
+   - **完整 API 測試**（需要 `/api/...` 端點）：
+     ```bash
+     npm run dev:vercel
+     ```
+     這會使用 Vercel CLI 啟動，可完整測試所有 API。
+
+   - **僅靜態頁面**：
+     ```bash
+     npm run dev:static
+     ```
+     打開 http://localhost:3000
+
+   > ⚠️ **注意**：請勿將 `vercel dev` 放在 `scripts.dev` 中，否則 Vercel CLI 會被誤認為是 Development Command，導致遞迴呼叫（recursive invocation）問題。
 
 ## 🚀 部署到 Vercel
 
@@ -163,10 +175,11 @@ youtube-dashboard/
 # 安裝依賴
 npm install
 
-# 啟動本地開發伺服器
-npm run dev
+# 完整 API 測試（使用 Vercel CLI）
+npm run dev:vercel
 
-# 開啟 http://localhost:3000
+# 或者僅靜態頁面
+npm run dev:static
 
 # 執行測試
 node scripts/test-24h-views.js

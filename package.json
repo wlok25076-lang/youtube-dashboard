@@ -5,7 +5,8 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "dev": "npx serve public -l 3000",
+    "dev:static": "npx serve public -l 3000",
+    "dev:vercel": "vercel dev",
     "start": "node api/fetch-and-store-multi.js"
   },
   "keywords": [
