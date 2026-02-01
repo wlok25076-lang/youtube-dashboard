@@ -12,7 +12,7 @@ const DEFAULT_TRACKED_VIDEOS = {
         description: '主要追蹤的YouTube影片',
         color: '#0070f3',
         startDate: '2024-01-01',
-        publishDate: '2024-01-01'
+        publishDate: '2025-11-17'
     },
     'biryani': {
         id: 'NReeTQ3YTAU',
