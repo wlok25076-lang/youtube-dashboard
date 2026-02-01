@@ -7,8 +7,6 @@
     <!-- 添加 Chart.js 和 date-fns 適配器 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <!-- Quota Display Component Styles -->
-    <link rel="stylesheet" href="quota-display.css">
     
     <style>
         :root {
@@ -1192,38 +1190,6 @@
             display: none;
         }
         
-        /* ========== 【新增】緊湊型配額顯示樣式 ========== */
-        .quota-mini {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 10px;
-            font-size: 13px;
-            padding: 10px 12px;
-            background: rgba(0, 112, 243, 0.05);
-            border-radius: 8px;
-            border: 1px solid rgba(0, 112, 243, 0.1);
-        }
-        
-        .quota-label {
-            font-weight: 600;
-            color: var(--text-color);
-        }
-        
-        .quota-value {
-            font-weight: 700;
-            font-size: 14px;
-            white-space: nowrap;
-        }
-        
-        .quota-reset {
-            color: var(--secondary-color);
-            font-size: 12px;
-            width: 100%;
-            margin-top: 4px;
-            padding-top: 8px;
-            border-top: 1px dashed rgba(0, 0, 0, 0.1);
-        }
     </style>
 </head>
 <body>
@@ -1249,9 +1215,6 @@
                 <h3><span>🎬</span> 影片管理</h3>
                 <button id="closeManage" class="icon-btn">✕</button>
             </div>
-            
-            <!-- 【新增】緊湊型配額顯示 -->
-            <div id="quotaCompactDisplay" style="margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.03); border-radius: 8px;"></div>
             
             <div class="success-message" id="successMessage">
                 <span>✓</span> <span id="successText"></span>
@@ -1449,9 +1412,6 @@
         <div id="update-status" style="font-size: 12px; color: var(--secondary-color); text-align: center; font-style: italic;"></div>
     </footer>
 
-    <!-- Quota Display Component -->
-    <script src="quota-display.js"></script>
-    
     <script>
         // ==================== 全局变量 ====================
         let chart = null;
@@ -1500,97 +1460,6 @@
         }
         
         // ==================== 【新增】密碼驗證功能 ====================
-        
-        // 【新增】渲染緊湊型配額顯示
-        async function renderCompactQuota() {
-            const container = document.getElementById('quotaCompactDisplay');
-            if (!container) return;
-            
-            try {
-                const response = await fetch('/api/quota-status');
-                
-                // 如果API返回錯誤，使用默認值
-                if (!response.ok) {
-                    console.warn('配額API返回錯誤，使用默認值');
-                    renderDefaultQuota(container);
-                    return;
-                }
-                
-                const result = await response.json();
-                
-                if (result.success && result.quota) {
-                    const quota = result.quota;
-                    
-                    // 計算配額百分比
-                    const quotaPercent = Math.round((quota.usage / quota.limit) * 100);
-                    
-                    // 根據配額狀態設定顏色
-                    let colorClass = 'var(--positive-color)';
-                    let statusText = '正常';
-                    
-                    if (quotaPercent >= 90) {
-                        colorClass = 'var(--negative-color)';
-                        statusText = '危險';
-                    } else if (quotaPercent >= 70) {
-                        colorClass = 'var(--warning-color)';
-                        statusText = '警告';
-                    }
-                    
-                    // 格式化重置時間
-                    const resetDate = new Date(quota.resetDate);
-                    const resetText = resetDate.toLocaleDateString('zh-TW', {
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                    });
-                    
-                    container.innerHTML = `
-                        <div class="quota-mini">
-                            <span class="quota-label">📊 API配額：</span>
-                            <span class="quota-value" style="color: ${colorClass}">${formatNumberWithCommas(quota.usage)} / ${formatNumberWithCommas(quota.limit)}</span>
-                            <span class="quota-value" style="color: ${colorClass}">(${quotaPercent}%)</span>
-                            <span style="color: ${colorClass}; font-size: 12px;">${statusText}</span>
-                            <div class="quota-reset">🔄 重置時間: ${resetText}</div>
-                        </div>
-                    `;
-                } else {
-                    // API返回異常數據，使用默認值
-                    console.warn('配額API返回異常數據，使用默認值');
-                    renderDefaultQuota(container);
-                }
-            } catch (error) {
-                console.error('載入配額失敗:', error);
-                // 發生錯誤時使用默認值，不顯示錯誤訊息
-                renderDefaultQuota(container);
-            }
-        }
-        
-        // 【新增】渲染默認配額顯示
-        function renderDefaultQuota(container) {
-            const defaultUsage = 0;
-            const defaultTotal = 10000;
-            const defaultPercent = 0;
-            
-            // 計算24小時後的重置時間
-            const resetDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
-            const resetText = resetDate.toLocaleDateString('zh-TW', {
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-            
-            container.innerHTML = `
-                <div class="quota-mini">
-                    <span class="quota-label">📊 API配額：</span>
-                    <span class="quota-value" style="color: var(--primary-color)">${formatNumberWithCommas(defaultUsage)} / ${formatNumberWithCommas(defaultTotal)}</span>
-                    <span class="quota-value" style="color: var(--primary-color)">(${defaultPercent}%)</span>
-                    <span style="color: var(--primary-color); font-size: 12px;">正常</span>
-                    <div class="quota-reset">🔄 重置時間: ${resetText}</div>
-                </div>
-            `;
-        }
         
         // 顯示密碼對話框
         function showPasswordDialog() {
@@ -1657,9 +1526,6 @@
                     document.getElementById('managePanel').classList.remove('hidden');
                     document.getElementById('manageToggle').textContent = '✕ 關閉管理';
                     loadVideoList();
-                    
-                    // 【新增】渲染緊湊型配額顯示
-                    renderCompactQuota();
                 } else {
                     passwordError.textContent = '密碼錯誤';
                     passwordError.classList.remove('hidden');
