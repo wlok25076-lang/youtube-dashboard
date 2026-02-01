@@ -520,7 +520,8 @@ export default async function handler(req, res) {
       includeVideoInfo  // 【新增】控制是否獲取 YouTube 影片資訊
     } = req.query;
 
-    const shouldIncludeVideoInfo = includeVideoInfo === 'true';
+    // 【修改】預設為 true，始終從 YouTube API 獲取正確的發佈日期
+    const shouldIncludeVideoInfo = includeVideoInfo !== 'false';
     console.log(`📡 API請求: videoId=${videoId}, range=${range}, interval=${interval}, includeVideoInfo=${shouldIncludeVideoInfo}`);
 
     // 【修改】驗證影片ID是否在追蹤清單中
