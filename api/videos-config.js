@@ -38,10 +38,10 @@ const DEFAULT_ALL_VIDEO_IDS = Object.values(DEFAULT_TRACKED_VIDEOS).map(v => v.i
 // 【新增】從Gist讀取使用者配置的影片列表
 async function getUserVideoConfig() {
     if (!GIST_ID || !GITHUB_TOKEN) {
-        console.log('⚠️ 沒有GIST設定，使用預設配置');
+        console.log('⚠️ 沒有GIST設定，返回空配置');
         return {
-            TRACKED_VIDEOS: DEFAULT_TRACKED_VIDEOS,
-            ALL_VIDEO_IDS: DEFAULT_ALL_VIDEO_IDS
+            TRACKED_VIDEOS: {},
+            ALL_VIDEO_IDS: []
         };
     }
 
@@ -55,10 +55,10 @@ async function getUserVideoConfig() {
         });
 
         if (!response.ok) {
-            console.log(`⚠️ 無法讀取Gist: ${response.status}，使用預設配置`);
+            console.log(`⚠️ 無法讀取Gist: ${response.status}，返回空配置`);
             return {
-                TRACKED_VIDEOS: DEFAULT_TRACKED_VIDEOS,
-                ALL_VIDEO_IDS: DEFAULT_ALL_VIDEO_IDS
+                TRACKED_VIDEOS: {},
+                ALL_VIDEO_IDS: []
             };
         }
 
@@ -99,18 +99,18 @@ async function getUserVideoConfig() {
             }
         }
         
-        // 沒有找到有效的使用者配置，使用預設
-        console.log('📭 沒有找到使用者配置，使用預設配置');
+        // 沒有找到有效的使用者配置，返回空配置
+        console.log('📭 沒有找到有效的使用者配置，返回空配置');
         return {
-            TRACKED_VIDEOS: DEFAULT_TRACKED_VIDEOS,
-            ALL_VIDEO_IDS: DEFAULT_ALL_VIDEO_IDS
+            TRACKED_VIDEOS: {},
+            ALL_VIDEO_IDS: []
         };
         
     } catch (error) {
         console.error('❌ 讀取使用者配置時發生錯誤:', error.message);
         return {
-            TRACKED_VIDEOS: DEFAULT_TRACKED_VIDEOS,
-            ALL_VIDEO_IDS: DEFAULT_ALL_VIDEO_IDS
+            TRACKED_VIDEOS: {},
+            ALL_VIDEO_IDS: []
         };
     }
 }
@@ -171,8 +171,8 @@ async function saveUserVideoConfig(videos) {
 
 // 立即獲取配置（同步方式，但會警告）
 let currentConfig = {
-    TRACKED_VIDEOS: DEFAULT_TRACKED_VIDEOS,
-    ALL_VIDEO_IDS: DEFAULT_ALL_VIDEO_IDS
+    TRACKED_VIDEOS: {},
+    ALL_VIDEO_IDS: []
 };
 
 // 異步初始化
