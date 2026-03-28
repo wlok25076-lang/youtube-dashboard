@@ -374,10 +374,12 @@ export default async function handler(req, res) {
         const existingGist = await gistResponse.json();
         const filesToUpdate = {};
         
-        // 先複製現有檔案（保持其他檔案不變）
+        // 【重要修復】不再复制所有现有档案到 PATCH body
+        // GitHub API 返回的档案对象不含 content 字段，会导致档案被清空
+        // 只需保留空的 filesToUpdate，在处理每个视频时再添加有 content 的数据
+        // existingGist.files[fileName].content 仍用于读取旧数据（不变）
         if (existingGist.files) {
-            Object.assign(filesToUpdate, existingGist.files);
-            console.log(`📁 找到 ${Object.keys(existingGist.files).length} 個現有檔案`);
+            console.log(`📁 Gist 中有 ${Object.keys(existingGist.files).length} 個現有檔案（讀取用，不混入 PATCH）`);
         }
         
         // ==================== 【新增】批量查詢功能 ====================
@@ -518,74 +520,113 @@ export default async function handler(req, res) {
             console.log(`\n⚠️ 以下 ${failedVideoIds.length} 個影片獲取失敗:`, failedVideoIds);
         }
         
-        // 5. 批量更新所有 Gist 檔案（單次請求）
-        console.log(`\n📤 批量更新 Gist 檔案 (${Object.keys(filesToUpdate).length} 個)...`);
-        
+        // 5. 分批更新 Gist 檔案（避免 payload 超過 10MB 限制）
         const totalFiles = Object.keys(filesToUpdate).length;
-        const maxRetries = 3;
-        let updateSuccess = false;
+        const batchSize = 5; // 每批最多 5 個檔案
+        const fileNames = Object.keys(filesToUpdate);
         
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-                if (attempt > 1) {
-                    const waitTime = attempt * 1000; // 1s, 2s, 3s
-                    console.log(`   ⏳ 等待 ${waitTime}ms 後重試 (嘗試 ${attempt}/${maxRetries})...`);
-                    await new Promise(resolve => setTimeout(resolve, waitTime));
-                }
-                
-                console.log(`   🔄 嘗試 ${attempt}/${maxRetries}: 批量更新 ${totalFiles} 個檔案...`);
-                
-                const updateResponse = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-                    method: 'PATCH',
-                    headers: {
-                        'Authorization': `token ${GITHUB_TOKEN}`,
-                        'Content-Type': 'application/json',
-                        'User-Agent': 'Vercel-YouTube-Multi-Tracker'
-                    },
-                    body: JSON.stringify({
-                        description: `YouTube 多影片追蹤數據，最後更新: ${new Date().toISOString()}`,
-                        files: filesToUpdate  // ✅ 批量更新所有檔案
-                    })
-                });
-                
-                if (!updateResponse.ok) {
-                    const errorText = await updateResponse.text();
-                    
-                    // 409 衝突特別處理
-                    if (updateResponse.status === 409) {
-                        console.warn(`   ⚠️ 409 衝突 (嘗試 ${attempt}/${maxRetries})`);
-                        if (attempt < maxRetries) {
-                            continue; // 繼續重試
-                        }
+        // 計算總批次数
+        const totalBatches = Math.ceil(totalFiles / batchSize);
+        
+        console.log(`\n📤 分批更新 Gist 檔案: 共 ${totalFiles} 個檔案，分 ${totalBatches} 批 (每批最多 ${batchSize} 個)`);
+        
+        const maxRetries = 3;
+        let allBatchesSuccess = true;
+        let completedBatches = 0;
+        
+        // 分批處理
+        for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+            const startIdx = batchIndex * batchSize;
+            const endIdx = Math.min(startIdx + batchSize, totalFiles);
+            const batchFileNames = fileNames.slice(startIdx, endIdx);
+            
+            // 構建該批次的檔案對象
+            const batchFilesToUpdate = {};
+            batchFileNames.forEach(fileName => {
+                batchFilesToUpdate[fileName] = filesToUpdate[fileName];
+            });
+            
+            const currentBatch = batchIndex + 1;
+            console.log(`\n📦 批次 ${currentBatch}/${totalBatches}: 更新 ${batchFileNames.length} 個檔案`);
+            console.log(`   📁 檔案: ${batchFileNames.join(', ')}`);
+            
+            let batchSuccess = false;
+            
+            // 該批次進行 3 次重試
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                    if (attempt > 1) {
+                        const waitTime = attempt * 1000; // 1s, 2s, 3s
+                        console.log(`   ⏳ 等待 ${waitTime}ms 後重試 (嘗試 ${attempt}/${maxRetries})...`);
+                        await new Promise(resolve => setTimeout(resolve, waitTime));
                     }
                     
-                    // 其他錯誤直接拋出
-                    throw new Error(`Gist 更新失敗: ${updateResponse.status} - ${errorText.substring(0, 200)}`);
+                    console.log(`   🔄 嘗試 ${attempt}/${maxRetries}: 更新批次 ${currentBatch}/${totalBatches}...`);
+                    
+                    const updateResponse = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Authorization': `token ${GITHUB_TOKEN}`,
+                            'Content-Type': 'application/json',
+                            'User-Agent': 'Vercel-YouTube-Multi-Tracker'
+                        },
+                        body: JSON.stringify({
+                            description: `YouTube 多影片追蹤數據，最後更新: ${new Date().toISOString()}`,
+                            files: batchFilesToUpdate
+                        })
+                    });
+                    
+                    if (!updateResponse.ok) {
+                        const errorText = await updateResponse.text();
+                        
+                        // 409 衝突特別處理
+                        if (updateResponse.status === 409) {
+                            console.warn(`   ⚠️ 409 衝突 (批次 ${currentBatch}/${totalBatches}, 嘗試 ${attempt}/${maxRetries})`);
+                            if (attempt < maxRetries) {
+                                continue; // 繼續重試
+                            }
+                        }
+                        
+                        // 其他錯誤直接拋出
+                        throw new Error(`Gist 批次更新失敗: ${updateResponse.status} - ${errorText.substring(0, 200)}`);
+                    }
+                    
+                    // 成功
+                    console.log(`   ✅ 批次 ${currentBatch}/${totalBatches} 更新成功! (${batchFileNames.length} 個檔案)`);
+                    batchSuccess = true;
+                    break;
+                    
+                } catch (error) {
+                    console.error(`   ❌ 批次 ${currentBatch}/${totalBatches} 嘗試 ${attempt} 失敗:`, error.message);
+                    
+                    if (attempt === maxRetries) {
+                        console.error(`   🚨 批次 ${currentBatch}/${totalBatches} 所有重試嘗試均失敗`);
+                        allBatchesSuccess = false;
+                    }
                 }
-                
-                // 成功
-                console.log(`   ✅ 批量更新成功! (${totalFiles} 個檔案)`);
-                updateSuccess = true;
-                break;
-                
-            } catch (error) {
-                console.error(`   ❌ 嘗試 ${attempt} 失敗:`, error.message);
-                
-                if (attempt === maxRetries) {
-                    throw new Error(`Gist 批量更新失敗 (已重試 ${maxRetries} 次): ${error.message}`);
-                }
+            }
+            
+            if (batchSuccess) {
+                completedBatches++;
+            }
+            
+            // 如果還有更多批次，等待 500ms 後繼續
+            if (batchIndex < totalBatches - 1 && batchSuccess) {
+                console.log(`   ⏳ 批次間等待 500ms...`);
+                await new Promise(resolve => setTimeout(resolve, 500));
             }
         }
         
-        if (!updateSuccess) {
-            throw new Error(`Gist 批量更新失敗: 所有重試嘗試均失敗`);
+        if (!allBatchesSuccess) {
+            throw new Error(`Gist 分批更新失敗: 部分批次更新失敗`);
         }
         
         // 統計結果
-        console.log(`\n📊 Gist 更新統計:`);
+        console.log(`\n📊 Gist 分批更新統計:`);
         console.log(`   ✅ 成功更新: ${totalFiles} 個檔案`);
-        console.log(`   🚀 API 呼叫次數: 1 次 (節省 ${totalFiles - 1} 次)`);
-        console.log(`   ⏱️ 處理耗時: 節省約 ${(totalFiles - 1) * 0.2}s (無需等待 200ms/檔次)`);
+        console.log(`   📦 總批數: ${totalBatches} 批`);
+        console.log(`   🚀 API 呼叫次數: ${totalBatches} 次`);
+        console.log(`   ⏱️ 額外等待時間: ${(totalBatches - 1) * 0.5}s (批次間 500ms 間隔)`);
         
         // 6. 成功回應
         const successful = results.filter(r => r.success).length;
